@@ -1,0 +1,495 @@
+<title>RGBTD</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
+<style>
+/* Single dark arcade look (deliberately one theme): HUD strip, portrait map, build bar under the thumb */
+:root {
+  --bg: #0a0b12;
+  --panel: #151827;
+  --edge: #2c3150;
+  --ink: #eef0fa;
+  --dim: #8b90b0;
+  --warn: #ffd54a;
+  --pix: "Press Start 2P", ui-monospace, "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--pix);
+  font-size: 10px;
+  line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+#app {
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-block: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hud {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.hud span b { color: var(--ink); font-weight: normal; }
+.hud span { color: var(--dim); }
+#stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+  max-width: 100%;
+  cursor: pointer;
+}
+#info {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--dim);
+}
+#info .msg { min-width: 0; }
+#info .msg.alert { color: var(--warn); }
+.row { display: flex; gap: 6px; }
+.row > * { flex: 1; }
+button {
+  font-family: var(--pix);
+  font-size: 10px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 2px solid var(--edge);
+  border-radius: 0;
+  padding: 10px 6px;
+  box-shadow: inset -2px -2px 0 rgba(0,0,0,.45), inset 2px 2px 0 rgba(255,255,255,.06);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+button:active { box-shadow: inset 2px 2px 0 rgba(0,0,0,.45); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+button[aria-pressed="true"] { border-color: var(--ink); }
+button:disabled { color: var(--dim); cursor: default; }
+.sw { width: 10px; height: 10px; outline: 1px solid var(--ink); }
+.sw.r { background: rgb(255,0,0); }
+.sw.g { background: rgb(0,255,0); }
+.sw.b { background: rgb(0,0,255); }
+#go { flex: 3; padding-block: 12px; }
+#sell { flex: 0 0 auto; padding: 8px; }
+</style>
+
+<div id="app">
+  <div class="hud">
+    <span>LIVES <b id="lives">10</b></span>
+    <span>COIN <b id="coins">120</b></span>
+    <span>WAVE <b id="wave">0/10</b></span>
+  </div>
+
+  <div id="stage"><canvas id="map" width="180" height="280" aria-label="Game map"></canvas></div>
+
+  <div id="info">
+    <span class="msg" id="msg">PICK A COLOUR, TAP A TILE</span>
+    <button id="sell" hidden>SELL</button>
+  </div>
+
+  <div class="row" role="group" aria-label="Tower colour">
+    <button id="ch0" data-ch="0" aria-pressed="true"><span class="sw r"></span>RED</button>
+    <button id="ch1" data-ch="1" aria-pressed="false"><span class="sw g"></span>GRN</button>
+    <button id="ch2" data-ch="2" aria-pressed="false"><span class="sw b"></span>BLU</button>
+  </div>
+  <div class="row" role="group" aria-label="Tower type">
+    <button id="tshot" data-type="shot" aria-pressed="true">SHOT 40</button>
+    <button id="tbeam" data-type="beam" aria-pressed="false">BEAM 60</button>
+  </div>
+  <div class="row">
+    <button id="go">SEND WAVE 1</button>
+    <button id="spd">1X</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- constants ----------
+  const T = 20, COLS = 9, ROWS = 14, W = COLS * T, H = ROWS * T;
+  const MAX_WAVE = 10;
+  const COIN_PER_POINTS = 20;           // 1 coin per 20 colour points drained
+  const CH = [
+    { name: 'RED', css: 'rgb(255,0,0)' },
+    { name: 'GRN', css: 'rgb(0,255,0)' },
+    { name: 'BLU', css: 'rgb(0,0,255)' },
+  ];
+  const TYPES = {
+    shot: { name: 'SHOT', cost: 40, range: 2.5 * T, rate: 0.9, dmg: 40 },
+    beam: { name: 'BEAM', cost: 60, range: 2.0 * T, dps: 45 },
+  };
+
+  // Path waypoints in tile coords. Enemies enter at the top, leave at the bottom.
+  const RAW = [[1,-1],[1,3],[7,3],[7,6],[1,6],[1,9],[7,9],[7,12],[4,12],[4,14]];
+  const WP = RAW.map(([c, r]) => [c * T + T / 2, r * T + T / 2]);
+  const SEG = []; let PATH_LEN = 0;
+  for (let i = 0; i < WP.length - 1; i++) {
+    const [x1, y1] = WP[i], [x2, y2] = WP[i + 1];
+    const l = Math.hypot(x2 - x1, y2 - y1);
+    SEG.push({ x1, y1, x2, y2, l, start: PATH_LEN });
+    PATH_LEN += l;
+  }
+  const pathTiles = new Set();
+  for (let i = 0; i < RAW.length - 1; i++) {
+    const [c1, r1] = RAW[i], [c2, r2] = RAW[i + 1];
+    for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
+      for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++)
+        if (c >= 0 && c < COLS && r >= 0 && r < ROWS) pathTiles.add(c + ',' + r);
+  }
+  function posAt(d) {
+    for (const s of SEG) if (d <= s.start + s.l) {
+      const t = (d - s.start) / s.l;
+      return [s.x1 + (s.x2 - s.x1) * t, s.y1 + (s.y2 - s.y1) * t];
+    }
+    const s = SEG[SEG.length - 1]; return [s.x2, s.y2];
+  }
+
+  // Early waves are single-colour; later waves mix single-colour enemies.
+  const R = [255,0,0], G = [0,255,0], B = [0,0,255];
+  const WAVES = [
+    // count, colours, speed (tiles/s), spawn gap (s)
+    [6,  [R],     0.9,  0.9],
+    [10, [R],     1.0,  0.8],
+    [8,  [G],     1.0,  0.8],
+    [10, [B],     1.0,  0.8],
+    [12, [R,G],   1.05, 0.7],
+    [14, [R,G,B], 1.1,  0.7],
+    [16, [R,G,B], 1.2,  0.6],
+    [18, [R,G,B], 1.3,  0.55],
+    [22, [R,G,B], 1.35, 0.5],
+    [26, [R,G,B], 1.45, 0.45],
+  ];
+
+  // ---------- state ----------
+  let S;
+  function reset() {
+    S = {
+      lives: 10, coins: 120, coinFrac: 0, wave: 0, active: false,
+      queue: [], gap: 0.8, spawnT: 0,
+      enemies: [], towers: [], bullets: [], fx: [],
+      sel: null, ch: 0, type: 'shot', speed: 1,
+      over: false, won: false, deaths: [], // deaths: kill positions, feeds the heat map later
+      msg: 'PICK A COLOUR, TAP A TILE', alert: false, t: 0,
+    };
+  }
+  reset();
+
+  function say(m, alert = false) { S.msg = m; S.alert = alert; }
+
+  // ---------- rules ----------
+  function sendWave() {
+    if (S.over || S.won) { reset(); return; }
+    if (S.active) return;
+    S.wave++;
+    const [n, cols, spd, gap] = WAVES[S.wave - 1];
+    S.queue = Array.from({ length: n }, (_, i) => ({ c: [...cols[i % cols.length]], spd }));
+    S.gap = gap; S.spawnT = 0; S.active = true;
+    say('WAVE ' + S.wave + ' INCOMING');
+  }
+
+  function drain(e, ch, amt) {
+    const before = e.c[ch];
+    e.c[ch] = Math.max(0, before - amt);
+    S.coinFrac += (before - e.c[ch]) / COIN_PER_POINTS;
+    const whole = Math.floor(S.coinFrac);
+    if (whole) { S.coins += whole; S.coinFrac -= whole; }
+    if (e.c[0] + e.c[1] + e.c[2] < 0.5) kill(e);
+  }
+
+  function kill(e) {
+    e.dead = true;
+    S.deaths.push([e.x, e.y]);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      S.fx.push({ x: e.x, y: e.y, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40, life: 0.35 });
+    }
+  }
+
+  function target(tw, range) {
+    let best = null;
+    for (const e of S.enemies) {
+      if (e.dead || e.c[tw.ch] <= 0) continue;          // only shoot what this colour can hurt
+      if (Math.hypot(e.x - tw.x, e.y - tw.y) > range) continue;
+      if (!best || e.d > best.d) best = e;              // furthest along the path first
+    }
+    return best;
+  }
+
+  function step(dt) {
+    if (S.over || S.won) return;
+    S.t += dt;
+
+    // spawn
+    if (S.queue.length) {
+      S.spawnT -= dt;
+      if (S.spawnT <= 0) {
+        const q = S.queue.shift();
+        const [x, y] = posAt(0);
+        S.enemies.push({ d: 0, x, y, c: q.c, spd: q.spd * T, dead: false });
+        S.spawnT = S.gap;
+      }
+    }
+
+    // move
+    for (const e of S.enemies) {
+      if (e.dead) continue;
+      e.d += e.spd * dt;
+      if (e.d >= PATH_LEN) {
+        e.dead = true; S.lives--;
+        say('LEAK! ' + S.lives + ' LIVES LEFT', true);
+        if (S.lives <= 0) { S.lives = 0; S.over = true; say('GAME OVER', true); }
+        continue;
+      }
+      [e.x, e.y] = posAt(e.d);
+    }
+
+    // towers
+    for (const tw of S.towers) {
+      const ty = TYPES[tw.type];
+      if (tw.type === 'shot') {
+        tw.cd -= dt;
+        if (tw.cd <= 0) {
+          const e = target(tw, ty.range);
+          if (e) { S.bullets.push({ x: tw.x, y: tw.y, tgt: e, ch: tw.ch, dmg: ty.dmg }); tw.cd = ty.rate; }
+        }
+      } else {
+        if (!tw.tgt || tw.tgt.dead || tw.tgt.c[tw.ch] <= 0 ||
+            Math.hypot(tw.tgt.x - tw.x, tw.tgt.y - tw.y) > ty.range) tw.tgt = target(tw, ty.range);
+        if (tw.tgt) drain(tw.tgt, tw.ch, ty.dps * dt);
+      }
+    }
+
+    // bullets
+    for (const b of S.bullets) {
+      if (b.tgt.dead) { b.done = true; continue; }
+      const dx = b.tgt.x - b.x, dy = b.tgt.y - b.y, dist = Math.hypot(dx, dy);
+      const mv = 160 * dt;
+      if (dist <= mv + 3) { drain(b.tgt, b.ch, b.dmg); b.done = true; }
+      else { b.x += dx / dist * mv; b.y += dy / dist * mv; }
+    }
+
+    // fx
+    for (const f of S.fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt; }
+
+    S.enemies = S.enemies.filter(e => !e.dead);
+    S.bullets = S.bullets.filter(b => !b.done);
+    S.fx = S.fx.filter(f => f.life > 0);
+    for (const tw of S.towers) if (tw.tgt && tw.tgt.dead) tw.tgt = null;
+
+    // wave cleared
+    if (S.active && !S.queue.length && !S.enemies.length && !S.over) {
+      S.active = false;
+      const bonus = 20 + S.wave * 2;
+      S.coins += bonus;
+      if (S.wave >= MAX_WAVE) { S.won = true; say('MAP CLEARED!'); }
+      else say('WAVE ' + S.wave + ' CLEAR +' + bonus);
+    }
+  }
+
+  // ---------- input ----------
+  const cvs = document.getElementById('map');
+  const ctx = cvs.getContext('2d');
+  let hover = null;
+
+  function tileFromEvent(ev) {
+    const r = cvs.getBoundingClientRect();
+    const x = (ev.clientX - r.left) / r.width * W, y = (ev.clientY - r.top) / r.height * H;
+    const c = Math.floor(x / T), rr = Math.floor(y / T);
+    if (c < 0 || c >= COLS || rr < 0 || rr >= ROWS) return null;
+    return [c, rr];
+  }
+
+  cvs.addEventListener('pointerdown', ev => {
+    if (S.over || S.won) return;
+    const t = tileFromEvent(ev); if (!t) return;
+    const [c, r] = t;
+    const existing = S.towers.find(tw => tw.c === c && tw.r === r);
+    if (existing) { S.sel = S.sel === existing ? null : existing; return; }
+    S.sel = null;
+    if (pathTiles.has(c + ',' + r)) { say("CAN'T BUILD ON THE PATH", true); return; }
+    const ty = TYPES[S.type];
+    if (S.coins < ty.cost) { say('NEED ' + ty.cost + ' COIN', true); return; }
+    S.coins -= ty.cost;
+    S.towers.push({ c, r, x: c * T + T / 2, y: r * T + T / 2, ch: S.ch, type: S.type, cd: 0, tgt: null, cost: ty.cost });
+    say(CH[S.ch].name + ' ' + ty.name + ' BUILT');
+  });
+  cvs.addEventListener('pointermove', ev => { hover = ev.pointerType === 'mouse' ? tileFromEvent(ev) : null; });
+  cvs.addEventListener('pointerleave', () => { hover = null; });
+
+  const $ = id => document.getElementById(id);
+  [0,1,2].forEach(i => $('ch' + i).addEventListener('click', () => { S.ch = i; S.sel = null; }));
+  ['shot','beam'].forEach(k => $('t' + k).addEventListener('click', () => { S.type = k; S.sel = null; }));
+  $('go').addEventListener('click', sendWave);
+  $('spd').addEventListener('click', () => { S.speed = S.speed === 3 ? 1 : S.speed + 1; });
+  $('sell').addEventListener('click', () => {
+    if (!S.sel) return;
+    const refund = Math.floor(S.sel.cost * 0.7);
+    S.coins += refund;
+    S.towers = S.towers.filter(tw => tw !== S.sel);
+    S.sel = null;
+    say('SOLD +' + refund);
+  });
+
+  // ---------- render ----------
+  function drawMap() {
+    ctx.fillStyle = '#22263b'; ctx.fillRect(0, 0, W, H);           // grid lines
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const x = c * T, y = r * T;
+      if (pathTiles.has(c + ',' + r)) { ctx.fillStyle = '#000'; ctx.fillRect(x, y, T, T); }
+      else { ctx.fillStyle = '#171a2a'; ctx.fillRect(x + 1, y + 1, T - 1, T - 1); }
+    }
+  }
+
+  function drawTower(tw) {
+    const x = tw.c * T, y = tw.r * T;
+    ctx.fillStyle = '#2f3452'; ctx.fillRect(x + 2, y + 2, 16, 16);
+    ctx.fillStyle = '#4a5180'; ctx.fillRect(x + 2, y + 2, 16, 1); ctx.fillRect(x + 2, y + 2, 1, 16);
+    ctx.fillStyle = '#12141f'; ctx.fillRect(x + 2, y + 17, 16, 1); ctx.fillRect(x + 17, y + 2, 1, 16);
+    ctx.fillStyle = CH[tw.ch].css;
+    if (tw.type === 'shot') ctx.fillRect(x + 7, y + 7, 6, 6);
+    else {
+      ctx.fillRect(x + 5, y + 5, 10, 2); ctx.fillRect(x + 5, y + 13, 10, 2);
+      ctx.fillRect(x + 5, y + 5, 2, 10); ctx.fillRect(x + 13, y + 5, 2, 10);
+      ctx.fillRect(x + 9, y + 9, 2, 2);
+    }
+  }
+
+  function ring(x, y, rad, col) {
+    ctx.strokeStyle = col; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function render() {
+    drawMap();
+
+    // hover preview (mouse only)
+    if (hover && !S.over && !S.won) {
+      const [c, r] = hover, key = c + ',' + r;
+      const occupied = S.towers.some(tw => tw.c === c && tw.r === r);
+      if (!pathTiles.has(key) && !occupied) {
+        ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(c * T + 1, r * T + 1, T - 1, T - 1);
+        ring(c * T + T / 2, r * T + T / 2, TYPES[S.type].range, 'rgba(255,255,255,0.35)');
+      }
+    }
+
+    for (const tw of S.towers) drawTower(tw);
+    if (S.sel) {
+      ctx.strokeStyle = '#fff'; ctx.strokeRect(S.sel.c * T + 1.5, S.sel.r * T + 1.5, 17, 17);
+      ring(S.sel.x, S.sel.y, TYPES[S.sel.type].range, 'rgba(255,255,255,0.45)');
+    }
+
+    // beams
+    for (const tw of S.towers) if (tw.type === 'beam' && tw.tgt && !tw.tgt.dead) {
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(S.t * 40);
+      ctx.strokeStyle = CH[tw.ch].css; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(tw.x, tw.y); ctx.lineTo(tw.tgt.x, tw.tgt.y); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // enemies: colour is health, thin white outline keeps them visible on the black path
+    for (const e of S.enemies) {
+      const x = Math.round(e.x) - 5, y = Math.round(e.y) - 5;
+      ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 12, 12);
+      ctx.fillStyle = `rgb(${Math.round(e.c[0])},${Math.round(e.c[1])},${Math.round(e.c[2])})`;
+      ctx.fillRect(x, y, 10, 10);
+    }
+
+    for (const b of S.bullets) { ctx.fillStyle = CH[b.ch].css; ctx.fillRect(Math.round(b.x) - 1, Math.round(b.y) - 1, 3, 3); }
+    for (const f of S.fx) { ctx.globalAlpha = Math.max(0, f.life / 0.35); ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
+    ctx.globalAlpha = 1;
+
+    if (S.over || S.won) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, H / 2 - 30, W, 60);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '12px "Press Start 2P", monospace';
+      ctx.fillText(S.won ? 'MAP CLEARED' : 'GAME OVER', W / 2, H / 2 - 8);
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.fillStyle = '#8b90b0';
+      ctx.fillText(S.won ? 'ALL 10 WAVES HELD' : 'REACHED WAVE ' + S.wave, W / 2, H / 2 + 12);
+    }
+  }
+
+  // ---------- UI sync ----------
+  const ui = {};
+  function set(id, prop, val) {
+    const k = id + prop; if (ui[k] === val) return; ui[k] = val;
+    if (prop === 'text') $(id).textContent = val;
+    else if (prop === 'hidden') $(id).hidden = val;
+    else if (prop === 'disabled') $(id).disabled = val;
+    else $(id).setAttribute(prop, val);
+  }
+  function syncUI() {
+    set('lives', 'text', String(S.lives));
+    set('coins', 'text', String(S.coins));
+    set('wave', 'text', S.wave + '/' + MAX_WAVE);
+    [0,1,2].forEach(i => set('ch' + i, 'aria-pressed', String(S.ch === i)));
+    set('tshot', 'aria-pressed', String(S.type === 'shot'));
+    set('tbeam', 'aria-pressed', String(S.type === 'beam'));
+    set('spd', 'text', S.speed + 'X');
+    if (S.over || S.won) { set('go', 'text', 'PLAY AGAIN'); set('go', 'disabled', false); }
+    else if (S.active) { set('go', 'text', 'WAVE ' + S.wave + ' LIVE'); set('go', 'disabled', true); }
+    else { set('go', 'text', 'SEND WAVE ' + (S.wave + 1)); set('go', 'disabled', false); }
+    if (S.sel) {
+      set('msg', 'text', CH[S.sel.ch].name + ' ' + TYPES[S.sel.type].name);
+      set('sell', 'text', 'SELL +' + Math.floor(S.sel.cost * 0.7));
+      set('sell', 'hidden', false);
+      set('msg', 'class', 'msg');
+    } else {
+      set('msg', 'text', S.msg);
+      set('sell', 'hidden', true);
+      set('msg', 'class', S.alert ? 'msg alert' : 'msg');
+    }
+  }
+
+  // ---------- sizing ----------
+  const stage = $('stage');
+  function fit() {
+    const r = stage.getBoundingClientRect();
+    let s = Math.min(r.width / W, r.height / H);
+    if (s >= 2) s = Math.floor(s);
+    s = Math.max(s, 0.5);
+    cvs.style.width = W * s + 'px';
+    cvs.style.height = H * s + 'px';
+  }
+  new ResizeObserver(fit).observe(stage);
+  fit();
+
+  // ---------- loop ----------
+  const DT = 1 / 60; let acc = 0, last = performance.now();
+  function frame(now) {
+    acc += Math.min(0.1, (now - last) / 1000); last = now;
+    while (acc >= DT) { for (let i = 0; i < S.speed; i++) step(DT); acc -= DT; }
+    render(); syncUI();
+    requestAnimationFrame(frame);
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());
+  requestAnimationFrame(frame);
+})();
+</script>
