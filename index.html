@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap">
 <style>
-/* Single dark arcade look (deliberately one theme): HUD strip, portrait map, build bar under the thumb */
+/* Single dark arcade look (deliberately one theme): one screen at a time, map in the middle, controls under the thumb */
 :root {
   --bg: #0a0b12;
   --panel: #151827;
@@ -12,6 +12,9 @@
   --ink: #eef0fa;
   --dim: #8b90b0;
   --warn: #ffd54a;
+  --r: rgb(255,0,0);
+  --g: rgb(0,255,0);
+  --b: rgb(0,0,255);
   --pix: "Press Start 2P", ui-monospace, "Courier New", monospace;
   color-scheme: dark;
 }
@@ -21,7 +24,7 @@ body {
   color: var(--ink);
   font-family: var(--pix);
   font-size: 10px;
-  line-height: 1.5;
+  line-height: 1.6;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
   box-sizing: border-box;
@@ -29,46 +32,46 @@ body {
   user-select: none;
   touch-action: manipulation;
 }
-#app {
+#app { height: 100%; max-width: 480px; margin: 0 auto; }
+.screen {
   height: 100%;
-  max-width: 480px;
-  margin: 0 auto;
   padding-block: 10px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+.scroll { overflow-y: auto; }
+h1 {
+  font-size: 32px;
+  font-weight: normal;
+  letter-spacing: 2px;
+  margin: 0;
+  text-align: center;
+  line-height: 1.2;
+}
+h1 .r { color: var(--r); } h1 .g { color: var(--g); } h1 .b { color: var(--b); text-shadow: 0 0 0 #fff; }
+h2 { font-size: 12px; font-weight: normal; margin: 0; letter-spacing: 1px; }
+p { margin: 0; color: var(--dim); }
+.tag { text-align: center; color: var(--dim); }
+.xp { color: var(--warn); }
+.menu-body { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 24px; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.top button { padding: 8px; }
 .hud {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
   font-variant-numeric: tabular-nums;
 }
-.hud span b { color: var(--ink); font-weight: normal; }
 .hud span { color: var(--dim); }
-#stage {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-canvas {
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  display: block;
-  max-width: 100%;
-  cursor: pointer;
-}
-#info {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--dim);
-}
+.hud b { color: var(--ink); font-weight: normal; }
+#stage { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; }
+#map { cursor: pointer; }
+#info { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--dim); }
 #info .msg { min-width: 0; }
 #info .msg.alert { color: var(--warn); }
 .row { display: flex; gap: 6px; }
@@ -93,138 +96,352 @@ button:active { box-shadow: inset 2px 2px 0 rgba(0,0,0,.45); }
 button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 button[aria-pressed="true"] { border-color: var(--ink); }
 button:disabled { color: var(--dim); cursor: default; }
-.sw { width: 10px; height: 10px; outline: 1px solid var(--ink); }
-.sw.r { background: rgb(255,0,0); }
-.sw.g { background: rgb(0,255,0); }
-.sw.b { background: rgb(0,0,255); }
+.big { padding-block: 14px; font-size: 12px; }
+.sw { width: 10px; height: 10px; outline: 1px solid var(--ink); flex: 0 0 auto; }
+.sw.r { background: var(--r); } .sw.g { background: var(--g); } .sw.b { background: var(--b); }
 #go { flex: 3; padding-block: 12px; }
 #sell { flex: 0 0 auto; padding: 8px; }
+
+/* level + upgrade cards */
+.card {
+  width: 100%;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+}
+.card .line { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card .sub { color: var(--dim); }
+.card .chips { display: flex; gap: 4px; }
+.pips { display: flex; gap: 3px; }
+.pip { width: 8px; height: 8px; background: var(--edge); }
+.pip.on { background: var(--warn); }
+
+/* stats */
+.grid2 { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-variant-numeric: tabular-nums; }
+.grid2 span:nth-child(odd) { color: var(--dim); }
+.heat { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.info-list { display: flex; flex-direction: column; gap: 14px; }
+.info-list p { color: var(--ink); }
+.info-list p span { color: var(--dim); }
 </style>
 
 <div id="app">
-  <div class="hud">
-    <span>LIVES <b id="lives">10</b></span>
-    <span>COIN <b id="coins">120</b></span>
-    <span>WAVE <b id="wave">0/10</b></span>
-  </div>
 
-  <div id="stage"><canvas id="map" width="180" height="280" aria-label="Game map"></canvas></div>
+  <!-- MENU -->
+  <section class="screen" id="scr-menu">
+    <div class="menu-body">
+      <div class="stack">
+        <h1><span class="r">R</span><span class="g">G</span><span class="b">B</span>TD</h1>
+        <p class="tag">COLOUR IS HEALTH</p>
+      </div>
+      <div class="stack">
+        <button class="big" data-go="levels">LEVELS</button>
+        <button class="big" data-go="upgrades">UPGRADES</button>
+        <button class="big" data-go="stats">STATS</button>
+        <button class="big" data-go="info">HOW TO PLAY</button>
+      </div>
+      <p class="tag"><span class="xp" id="menu-xp">0 XP</span></p>
+    </div>
+  </section>
 
-  <div id="info">
-    <span class="msg" id="msg">PICK A COLOUR, TAP A TILE</span>
-    <button id="sell" hidden>SELL</button>
-  </div>
+  <!-- LEVELS -->
+  <section class="screen" id="scr-levels" hidden>
+    <div class="top"><button data-go="menu">BACK</button><h2>LEVELS</h2><span></span></div>
+    <div class="stack scroll" id="level-list"></div>
+  </section>
 
-  <div class="row" role="group" aria-label="Tower colour">
-    <button id="ch0" data-ch="0" aria-pressed="true"><span class="sw r"></span>RED</button>
-    <button id="ch1" data-ch="1" aria-pressed="false"><span class="sw g"></span>GRN</button>
-    <button id="ch2" data-ch="2" aria-pressed="false"><span class="sw b"></span>BLU</button>
-  </div>
-  <div class="row" role="group" aria-label="Tower type">
-    <button id="tshot" data-type="shot" aria-pressed="true">SHOT 40</button>
-    <button id="tbeam" data-type="beam" aria-pressed="false">BEAM 60</button>
-  </div>
-  <div class="row">
-    <button id="go">SEND WAVE 1</button>
-    <button id="spd">1X</button>
-  </div>
+  <!-- UPGRADES -->
+  <section class="screen" id="scr-upgrades" hidden>
+    <div class="top"><button data-go="menu">BACK</button><h2>UPGRADES</h2><span class="xp" id="up-xp">0 XP</span></div>
+    <p>XP COMES FROM EVERY ATTEMPT, WIN OR LOSE.</p>
+    <div class="stack scroll" id="up-list"></div>
+  </section>
+
+  <!-- STATS -->
+  <section class="screen scroll" id="scr-stats" hidden>
+    <div class="top"><button data-go="menu">BACK</button><h2>STATS</h2><span></span></div>
+    <div class="grid2" id="stat-grid"></div>
+    <div class="heat">
+      <h2>LAST RUN HEAT MAP</h2>
+      <canvas id="heat" width="180" height="280" aria-label="Where enemies died in your last run"></canvas>
+      <p id="heat-note">BRIGHTER TILES = MORE KILLS</p>
+    </div>
+  </section>
+
+  <!-- INFO -->
+  <section class="screen scroll" id="scr-info" hidden>
+    <div class="top"><button data-go="menu">BACK</button><h2>HOW TO PLAY</h2><span></span></div>
+    <div class="info-list">
+      <p>ENEMIES WALK DOWN THE BLACK PATH.<br><span>STOP THEM REACHING THE BOTTOM.</span></p>
+      <p>AN ENEMY'S COLOUR IS ITS HEALTH.<br><span>EACH OF RED, GREEN, BLUE GOES FROM 255 TO 0. BLACK = DEAD.</span></p>
+      <p>EACH TOWER DRAINS ONE COLOUR.<br><span>A RED TOWER CAN'T HURT A GREEN ENEMY. BUILD THE RIGHT MIX.</span></p>
+      <p>SHOT TOWERS FIRE BULLETS.<br><span>BIG HITS, LONGER RANGE, CAN WASTE DAMAGE.</span></p>
+      <p>BEAM TOWERS DRAIN NONSTOP.<br><span>NO WASTE, SHORTER RANGE, COST MORE.</span></p>
+      <p>DRAINING COLOUR EARNS COIN.<br><span>TAP A TOWER TO SEE ITS RANGE OR SELL IT.</span></p>
+      <p>EVERY ATTEMPT EARNS XP.<br><span>SPEND IT ON UPGRADES BETWEEN RUNS.</span></p>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section class="screen" id="scr-game" hidden>
+    <div class="hud">
+      <button id="quit">MENU</button>
+      <span>LV <b id="lvl">1</b></span>
+      <span>♥ <b id="lives">10</b></span>
+      <span>¢ <b id="coins">120</b></span>
+      <span>W <b id="wave">0/8</b></span>
+    </div>
+    <div id="stage"><canvas id="map" width="180" height="280" aria-label="Game map"></canvas></div>
+    <div id="info">
+      <span class="msg" id="msg">PICK A COLOUR, TAP A TILE</span>
+      <button id="sell" hidden>SELL</button>
+    </div>
+    <div id="build" class="stack">
+      <div class="row" role="group" aria-label="Tower colour" id="ch-row">
+        <button id="ch0" aria-pressed="true"><span class="sw r"></span>RED</button>
+        <button id="ch1" aria-pressed="false"><span class="sw g"></span>GRN</button>
+        <button id="ch2" aria-pressed="false"><span class="sw b"></span>BLU</button>
+      </div>
+      <div class="row" role="group" aria-label="Tower type">
+        <button id="tshot" aria-pressed="true">SHOT 40</button>
+        <button id="tbeam" aria-pressed="false">BEAM 60</button>
+      </div>
+      <div class="row">
+        <button id="go">SEND WAVE 1</button>
+        <button id="spd">1X</button>
+      </div>
+    </div>
+    <div id="end" class="stack" hidden>
+      <div class="row">
+        <button id="retry" class="big">RETRY</button>
+        <button id="next" class="big">NEXT</button>
+      </div>
+      <button id="tomenu" class="big">MENU</button>
+    </div>
+  </section>
 </div>
 
 <script>
 (() => {
-  // ---------- constants ----------
-  const T = 20, COLS = 9, ROWS = 14, W = COLS * T, H = ROWS * T;
-  const MAX_WAVE = 10;
-  const COIN_PER_POINTS = 20;           // 1 coin per 20 colour points drained
-  const CH = [
-    { name: 'RED', css: 'rgb(255,0,0)' },
-    { name: 'GRN', css: 'rgb(0,255,0)' },
-    { name: 'BLU', css: 'rgb(0,0,255)' },
-  ];
-  const TYPES = {
-    shot: { name: 'SHOT', cost: 40, range: 2.5 * T, rate: 0.9, dmg: 40 },
-    beam: { name: 'BEAM', cost: 60, range: 2.0 * T, dps: 45 },
-  };
+  const $ = id => document.getElementById(id);
 
-  // Path waypoints in tile coords. Enemies enter at the top, leave at the bottom.
-  const RAW = [[1,-1],[1,3],[7,3],[7,6],[1,6],[1,9],[7,9],[7,12],[4,12],[4,14]];
-  const WP = RAW.map(([c, r]) => [c * T + T / 2, r * T + T / 2]);
-  const SEG = []; let PATH_LEN = 0;
-  for (let i = 0; i < WP.length - 1; i++) {
-    const [x1, y1] = WP[i], [x2, y2] = WP[i + 1];
-    const l = Math.hypot(x2 - x1, y2 - y1);
-    SEG.push({ x1, y1, x2, y2, l, start: PATH_LEN });
-    PATH_LEN += l;
+  // ================= constants =================
+  const T = 20, COLS = 9, ROWS = 14, W = COLS * T, H = ROWS * T;
+  const COIN_PER_POINTS = 20;
+  const CH = [
+    { name: 'RED', css: 'rgb(255,0,0)', cls: 'r' },
+    { name: 'GRN', css: 'rgb(0,255,0)', cls: 'g' },
+    { name: 'BLU', css: 'rgb(0,0,255)', cls: 'b' },
+  ];
+  const R = [255,0,0], G = [0,255,0], B = [0,0,255];
+
+  // Level N has N enemy colours. A new colour appears alone first, then mixes in.
+  const LEVELS = [
+    { n: 1, name: 'RED ALERT', chans: [0], waves: 8,
+      path: [[1,-1],[1,3],[7,3],[7,6],[1,6],[1,9],[7,9],[7,12],[4,12],[4,14]],
+      mix: w => [R] },
+    { n: 2, name: 'GREEN SHIFT', chans: [0,1], waves: 10,
+      path: [[7,-1],[7,2],[2,2],[2,5],[6,5],[6,8],[2,8],[2,11],[6,11],[6,14]],
+      mix: w => w <= 2 ? [G] : w === 3 ? [R] : [R,G] },
+    { n: 3, name: 'FULL SPECTRUM', chans: [0,1,2], waves: 12,
+      path: [[4,-1],[4,2],[1,2],[1,7],[7,7],[7,11],[4,11],[4,14]],
+      mix: w => w <= 2 ? [B] : w === 3 ? [R,G] : [R,G,B] },
+  ];
+  function waveDef(lv, w) {
+    const L = LEVELS[lv - 1];
+    return {
+      count: 5 + w * 2 + (lv - 1) * 2,
+      cols: L.mix(w),
+      spd: 0.9 + w * 0.05 + (lv - 1) * 0.05,
+      gap: Math.max(0.42, 0.9 - w * 0.045),
+    };
   }
-  const pathTiles = new Set();
-  for (let i = 0; i < RAW.length - 1; i++) {
-    const [c1, r1] = RAW[i], [c2, r2] = RAW[i + 1];
-    for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
-      for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++)
-        if (c >= 0 && c < COLS && r >= 0 && r < ROWS) pathTiles.add(c + ',' + r);
+
+  const UPGRADES = [
+    { id: 'shot',  name: 'SHOT POWER', desc: '+5 DAMAGE PER HIT', cost: [30, 60, 100] },
+    { id: 'beam',  name: 'BEAM POWER', desc: '+8 DRAIN PER SECOND', cost: [30, 60, 100] },
+    { id: 'range', name: 'LONG SIGHT', desc: '+10% TOWER RANGE', cost: [40, 80, 130] },
+    { id: 'coin',  name: 'WAR CHEST',  desc: '+25 STARTING COIN', cost: [25, 50, 90] },
+  ];
+
+  // ================= progress (saved in this browser) =================
+  const KEY = 'rgbtd.v1';
+  function freshProgress() {
+    return {
+      xp: 0, xpEarned: 0, unlocked: 1,
+      best: { 1: 0, 2: 0, 3: 0 }, cleared: {},
+      up: { shot: 0, beam: 0, range: 0, coin: 0 },
+      stats: { runs: 0, wins: 0, kills: 0, leaks: 0, drained: [0, 0, 0] },
+      heat: null,
+    };
   }
-  function posAt(d) {
-    for (const s of SEG) if (d <= s.start + s.l) {
+  let P = freshProgress();
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) P = Object.assign(freshProgress(), JSON.parse(raw));
+  } catch (e) { /* storage blocked: play without saving */ }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
+
+  function towerStats() {
+    const rm = 1 + 0.1 * P.up.range;
+    return {
+      shot: { name: 'SHOT', cost: 40, range: 2.5 * T * rm, rate: 0.9, dmg: 40 + 5 * P.up.shot },
+      beam: { name: 'BEAM', cost: 60, range: 2.0 * T * rm, dps: 45 + 8 * P.up.beam },
+    };
+  }
+
+  // ================= screens =================
+  const SCREENS = ['menu', 'levels', 'upgrades', 'stats', 'info', 'game'];
+  let current = 'menu';
+  function show(name) {
+    current = name;
+    SCREENS.forEach(s => { $('scr-' + s).hidden = s !== name; });
+    if (name === 'menu') $('menu-xp').textContent = P.xp + ' XP';
+    if (name === 'levels') renderLevels();
+    if (name === 'upgrades') renderUpgrades();
+    if (name === 'stats') renderStats();
+    if (name === 'game') fit();
+  }
+  document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => show(b.dataset.go)));
+
+  function chips(chans) {
+    return chans.map(c => `<span class="sw ${CH[c].cls}"></span>`).join('');
+  }
+
+  function renderLevels() {
+    const list = $('level-list'); list.innerHTML = '';
+    LEVELS.forEach(L => {
+      const locked = L.n > P.unlocked;
+      const best = P.best[L.n] || 0;
+      const b = document.createElement('button');
+      b.className = 'card';
+      b.disabled = locked;
+      const status = locked ? 'LOCKED · CLEAR LEVEL ' + (L.n - 1)
+        : P.cleared[L.n] ? 'CLEARED · BEST ' + best + '/' + L.waves
+        : best ? 'BEST ' + best + '/' + L.waves : 'NOT PLAYED';
+      b.innerHTML = `
+        <span class="line"><span>LEVEL ${L.n}</span><span class="chips">${chips(L.chans)}</span></span>
+        <span>${L.name}</span>
+        <span class="sub">${L.chans.length} COLOUR${L.chans.length > 1 ? 'S' : ''} · ${L.waves} WAVES</span>
+        <span class="sub">${status}</span>`;
+      b.addEventListener('click', () => startLevel(L.n));
+      list.appendChild(b);
+    });
+  }
+
+  function renderUpgrades() {
+    $('up-xp').textContent = P.xp + ' XP';
+    const list = $('up-list'); list.innerHTML = '';
+    UPGRADES.forEach(u => {
+      const lvl = P.up[u.id], maxed = lvl >= u.cost.length, price = u.cost[lvl];
+      const b = document.createElement('button');
+      b.className = 'card';
+      b.disabled = maxed || P.xp < price;
+      const pips = u.cost.map((_, i) => `<span class="pip${i < lvl ? ' on' : ''}"></span>`).join('');
+      b.innerHTML = `
+        <span class="line"><span>${u.name}</span><span class="pips">${pips}</span></span>
+        <span class="sub">${u.desc}</span>
+        <span class="sub">${maxed ? 'MAXED' : 'BUY · ' + price + ' XP'}</span>`;
+      b.addEventListener('click', () => {
+        if (maxed || P.xp < price) return;
+        P.xp -= price; P.up[u.id]++; save(); renderUpgrades();
+      });
+      list.appendChild(b);
+    });
+    const soon = document.createElement('button');
+    soon.className = 'card'; soon.disabled = true;
+    soon.innerHTML = `<span>C / M / Y SHOOTERS</span><span class="sub">DRAIN TWO COLOURS AT ONCE · COMING SOON</span>`;
+    list.appendChild(soon);
+  }
+
+  function renderStats() {
+    const s = P.stats;
+    const rows = [
+      ['RUNS', s.runs], ['MAPS CLEARED', s.wins], ['ENEMIES DRAINED', s.kills], ['LEAKS', s.leaks],
+      ['RED DRAINED', Math.round(s.drained[0])], ['GREEN DRAINED', Math.round(s.drained[1])],
+      ['BLUE DRAINED', Math.round(s.drained[2])], ['XP EARNED', P.xpEarned],
+      ...LEVELS.map(L => ['LV ' + L.n + ' BEST WAVE', (P.best[L.n] || 0) + '/' + L.waves]),
+    ];
+    $('stat-grid').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+    drawHeat();
+  }
+
+  // ================= map geometry =================
+  function buildPath(raw) {
+    const wp = raw.map(([c, r]) => [c * T + T / 2, r * T + T / 2]);
+    const seg = []; let len = 0;
+    for (let i = 0; i < wp.length - 1; i++) {
+      const [x1, y1] = wp[i], [x2, y2] = wp[i + 1];
+      const l = Math.hypot(x2 - x1, y2 - y1);
+      seg.push({ x1, y1, x2, y2, l, start: len }); len += l;
+    }
+    const tiles = new Set();
+    for (let i = 0; i < raw.length - 1; i++) {
+      const [c1, r1] = raw[i], [c2, r2] = raw[i + 1];
+      for (let c = Math.min(c1, c2); c <= Math.max(c1, c2); c++)
+        for (let r = Math.min(r1, r2); r <= Math.max(r1, r2); r++)
+          if (c >= 0 && c < COLS && r >= 0 && r < ROWS) tiles.add(c + ',' + r);
+    }
+    return { seg, len, tiles };
+  }
+  function posAt(path, d) {
+    for (const s of path.seg) if (d <= s.start + s.l) {
       const t = (d - s.start) / s.l;
       return [s.x1 + (s.x2 - s.x1) * t, s.y1 + (s.y2 - s.y1) * t];
     }
-    const s = SEG[SEG.length - 1]; return [s.x2, s.y2];
+    const s = path.seg[path.seg.length - 1]; return [s.x2, s.y2];
   }
 
-  // Early waves are single-colour; later waves mix single-colour enemies.
-  const R = [255,0,0], G = [0,255,0], B = [0,0,255];
-  const WAVES = [
-    // count, colours, speed (tiles/s), spawn gap (s)
-    [6,  [R],     0.9,  0.9],
-    [10, [R],     1.0,  0.8],
-    [8,  [G],     1.0,  0.8],
-    [10, [B],     1.0,  0.8],
-    [12, [R,G],   1.05, 0.7],
-    [14, [R,G,B], 1.1,  0.7],
-    [16, [R,G,B], 1.2,  0.6],
-    [18, [R,G,B], 1.3,  0.55],
-    [22, [R,G,B], 1.35, 0.5],
-    [26, [R,G,B], 1.45, 0.45],
-  ];
-
-  // ---------- state ----------
-  let S;
-  function reset() {
+  // ================= run state =================
+  let S = null;
+  function startLevel(n) {
+    const L = LEVELS[n - 1];
     S = {
-      lives: 10, coins: 120, coinFrac: 0, wave: 0, active: false,
-      queue: [], gap: 0.8, spawnT: 0,
+      lv: n, L, path: buildPath(L.path), types: towerStats(),
+      lives: 10, coins: 120 + 25 * P.up.coin, coinFrac: 0,
+      wave: 0, active: false, queue: [], gap: 0.8, spawnT: 0,
       enemies: [], towers: [], bullets: [], fx: [],
-      sel: null, ch: 0, type: 'shot', speed: 1,
-      over: false, won: false, deaths: [], // deaths: kill positions, feeds the heat map later
-      msg: 'PICK A COLOUR, TAP A TILE', alert: false, t: 0,
+      sel: null, ch: L.chans[0], type: 'shot', speed: 1,
+      over: false, won: false, ended: false, xpGain: 0,
+      kills: 0, leaks: 0, drained: [0, 0, 0], deaths: [],
+      msg: 'PICK A COLOUR, TAP A TILE', alert: false, t: 0, quitArm: 0,
     };
+    // only offer tower colours this level uses
+    [0, 1, 2].forEach(i => { $('ch' + i).hidden = !L.chans.includes(i); });
+    $('tshot').textContent = 'SHOT ' + S.types.shot.cost;
+    $('tbeam').textContent = 'BEAM ' + S.types.beam.cost;
+    Object.keys(ui).forEach(k => delete ui[k]);
+    show('game');
   }
-  reset();
 
   function say(m, alert = false) { S.msg = m; S.alert = alert; }
 
-  // ---------- rules ----------
   function sendWave() {
-    if (S.over || S.won) { reset(); return; }
-    if (S.active) return;
+    if (!S || S.ended || S.active) return;
     S.wave++;
-    const [n, cols, spd, gap] = WAVES[S.wave - 1];
-    S.queue = Array.from({ length: n }, (_, i) => ({ c: [...cols[i % cols.length]], spd }));
-    S.gap = gap; S.spawnT = 0; S.active = true;
-    say('WAVE ' + S.wave + ' INCOMING');
+    const d = waveDef(S.lv, S.wave);
+    S.queue = Array.from({ length: d.count }, (_, i) => ({ c: [...d.cols[i % d.cols.length]], spd: d.spd }));
+    S.gap = d.gap; S.spawnT = 0; S.active = true;
+    const fresh = d.cols.length === 1 && S.wave <= 2 && S.lv > 1;
+    say(fresh ? 'NEW: ' + CH[d.cols[0].indexOf(255)].name + ' ENEMIES' : 'WAVE ' + S.wave + ' INCOMING', fresh);
   }
 
   function drain(e, ch, amt) {
     const before = e.c[ch];
     e.c[ch] = Math.max(0, before - amt);
-    S.coinFrac += (before - e.c[ch]) / COIN_PER_POINTS;
+    const got = before - e.c[ch];
+    S.drained[ch] += got;
+    S.coinFrac += got / COIN_PER_POINTS;
     const whole = Math.floor(S.coinFrac);
     if (whole) { S.coins += whole; S.coinFrac -= whole; }
     if (e.c[0] + e.c[1] + e.c[2] < 0.5) kill(e);
   }
 
   function kill(e) {
-    e.dead = true;
+    e.dead = true; S.kills++;
     S.deaths.push([e.x, e.y]);
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
@@ -235,44 +452,67 @@ button:disabled { color: var(--dim); cursor: default; }
   function target(tw, range) {
     let best = null;
     for (const e of S.enemies) {
-      if (e.dead || e.c[tw.ch] <= 0) continue;          // only shoot what this colour can hurt
+      if (e.dead || e.c[tw.ch] <= 0) continue;
       if (Math.hypot(e.x - tw.x, e.y - tw.y) > range) continue;
-      if (!best || e.d > best.d) best = e;              // furthest along the path first
+      if (!best || e.d > best.d) best = e;
     }
     return best;
   }
 
-  function step(dt) {
-    if (S.over || S.won) return;
-    S.t += dt;
+  function endRun(won) {
+    if (S.ended) return;
+    S.ended = true; S.won = won; S.over = !won;
+    const cleared = won ? S.wave : S.wave - (S.active ? 1 : 0);
+    const xp = cleared * 5 + S.kills + (won ? 50 * S.lv : 0);
+    S.xpGain = xp;
+    P.xp += xp; P.xpEarned += xp;
+    P.stats.runs++; P.stats.kills += S.kills; P.stats.leaks += S.leaks;
+    for (let i = 0; i < 3; i++) P.stats.drained[i] += S.drained[i];
+    P.best[S.lv] = Math.max(P.best[S.lv] || 0, cleared);
+    if (won) {
+      P.stats.wins++; P.cleared[S.lv] = true;
+      P.unlocked = Math.max(P.unlocked, Math.min(LEVELS.length, S.lv + 1));
+    }
+    const counts = new Array(COLS * ROWS).fill(0);
+    for (const [x, y] of S.deaths) {
+      const c = Math.min(COLS - 1, Math.max(0, Math.floor(x / T)));
+      const r = Math.min(ROWS - 1, Math.max(0, Math.floor(y / T)));
+      counts[r * COLS + c]++;
+    }
+    P.heat = { lv: S.lv, counts };
+    save();
+    say(won ? 'LEVEL CLEARED! +' + xp + ' XP' : 'OUT OF LIVES. +' + xp + ' XP', !won);
+  }
 
-    // spawn
+  function step(dt) {
+    if (!S || S.ended) return;
+    S.t += dt;
+    if (S.quitArm > 0) S.quitArm -= dt;
+
     if (S.queue.length) {
       S.spawnT -= dt;
       if (S.spawnT <= 0) {
         const q = S.queue.shift();
-        const [x, y] = posAt(0);
+        const [x, y] = posAt(S.path, 0);
         S.enemies.push({ d: 0, x, y, c: q.c, spd: q.spd * T, dead: false });
         S.spawnT = S.gap;
       }
     }
 
-    // move
     for (const e of S.enemies) {
       if (e.dead) continue;
       e.d += e.spd * dt;
-      if (e.d >= PATH_LEN) {
-        e.dead = true; S.lives--;
+      if (e.d >= S.path.len) {
+        e.dead = true; S.lives--; S.leaks++;
         say('LEAK! ' + S.lives + ' LIVES LEFT', true);
-        if (S.lives <= 0) { S.lives = 0; S.over = true; say('GAME OVER', true); }
+        if (S.lives <= 0) { S.lives = 0; endRun(false); return; }
         continue;
       }
-      [e.x, e.y] = posAt(e.d);
+      [e.x, e.y] = posAt(S.path, e.d);
     }
 
-    // towers
     for (const tw of S.towers) {
-      const ty = TYPES[tw.type];
+      const ty = S.types[tw.type];
       if (tw.type === 'shot') {
         tw.cd -= dt;
         if (tw.cd <= 0) {
@@ -286,7 +526,6 @@ button:disabled { color: var(--dim); cursor: default; }
       }
     }
 
-    // bullets
     for (const b of S.bullets) {
       if (b.tgt.dead) { b.done = true; continue; }
       const dx = b.tgt.x - b.x, dy = b.tgt.y - b.y, dist = Math.hypot(dx, dy);
@@ -295,7 +534,6 @@ button:disabled { color: var(--dim); cursor: default; }
       else { b.x += dx / dist * mv; b.y += dy / dist * mv; }
     }
 
-    // fx
     for (const f of S.fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt; }
 
     S.enemies = S.enemies.filter(e => !e.dead);
@@ -303,18 +541,17 @@ button:disabled { color: var(--dim); cursor: default; }
     S.fx = S.fx.filter(f => f.life > 0);
     for (const tw of S.towers) if (tw.tgt && tw.tgt.dead) tw.tgt = null;
 
-    // wave cleared
-    if (S.active && !S.queue.length && !S.enemies.length && !S.over) {
+    if (S.active && !S.queue.length && !S.enemies.length) {
       S.active = false;
+      if (S.wave >= S.L.waves) { endRun(true); return; }
       const bonus = 20 + S.wave * 2;
       S.coins += bonus;
-      if (S.wave >= MAX_WAVE) { S.won = true; say('MAP CLEARED!'); }
-      else say('WAVE ' + S.wave + ' CLEAR +' + bonus);
+      say('WAVE ' + S.wave + ' CLEAR +' + bonus);
     }
   }
 
-  // ---------- input ----------
-  const cvs = document.getElementById('map');
+  // ================= input =================
+  const cvs = $('map');
   const ctx = cvs.getContext('2d');
   let hover = null;
 
@@ -327,14 +564,14 @@ button:disabled { color: var(--dim); cursor: default; }
   }
 
   cvs.addEventListener('pointerdown', ev => {
-    if (S.over || S.won) return;
+    if (!S || S.ended) return;
     const t = tileFromEvent(ev); if (!t) return;
     const [c, r] = t;
     const existing = S.towers.find(tw => tw.c === c && tw.r === r);
     if (existing) { S.sel = S.sel === existing ? null : existing; return; }
     S.sel = null;
-    if (pathTiles.has(c + ',' + r)) { say("CAN'T BUILD ON THE PATH", true); return; }
-    const ty = TYPES[S.type];
+    if (S.path.tiles.has(c + ',' + r)) { say("CAN'T BUILD ON THE PATH", true); return; }
+    const ty = S.types[S.type];
     if (S.coins < ty.cost) { say('NEED ' + ty.cost + ' COIN', true); return; }
     S.coins -= ty.cost;
     S.towers.push({ c, r, x: c * T + T / 2, y: r * T + T / 2, ch: S.ch, type: S.type, cd: 0, tgt: null, cost: ty.cost });
@@ -343,9 +580,8 @@ button:disabled { color: var(--dim); cursor: default; }
   cvs.addEventListener('pointermove', ev => { hover = ev.pointerType === 'mouse' ? tileFromEvent(ev) : null; });
   cvs.addEventListener('pointerleave', () => { hover = null; });
 
-  const $ = id => document.getElementById(id);
-  [0,1,2].forEach(i => $('ch' + i).addEventListener('click', () => { S.ch = i; S.sel = null; }));
-  ['shot','beam'].forEach(k => $('t' + k).addEventListener('click', () => { S.type = k; S.sel = null; }));
+  [0, 1, 2].forEach(i => $('ch' + i).addEventListener('click', () => { S.ch = i; S.sel = null; }));
+  ['shot', 'beam'].forEach(k => $('t' + k).addEventListener('click', () => { S.type = k; S.sel = null; }));
   $('go').addEventListener('click', sendWave);
   $('spd').addEventListener('click', () => { S.speed = S.speed === 3 ? 1 : S.speed + 1; });
   $('sell').addEventListener('click', () => {
@@ -356,14 +592,24 @@ button:disabled { color: var(--dim); cursor: default; }
     S.sel = null;
     say('SOLD +' + refund);
   });
+  // quitting mid-run asks for a second tap, and still banks XP for the attempt
+  $('quit').addEventListener('click', () => {
+    if (S.ended) { show('menu'); return; }
+    if (S.wave === 0 && !S.towers.length) { show('menu'); return; }
+    if (S.quitArm > 0) { endRun(false); show('menu'); return; }
+    S.quitArm = 2; say('TAP MENU AGAIN TO QUIT', true);
+  });
+  $('retry').addEventListener('click', () => startLevel(S.lv));
+  $('next').addEventListener('click', () => startLevel(Math.min(LEVELS.length, S.lv + 1)));
+  $('tomenu').addEventListener('click', () => show('menu'));
 
-  // ---------- render ----------
-  function drawMap() {
-    ctx.fillStyle = '#22263b'; ctx.fillRect(0, 0, W, H);           // grid lines
+  // ================= render =================
+  function drawMapTo(c2, tiles) {
+    c2.fillStyle = '#22263b'; c2.fillRect(0, 0, W, H);
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       const x = c * T, y = r * T;
-      if (pathTiles.has(c + ',' + r)) { ctx.fillStyle = '#000'; ctx.fillRect(x, y, T, T); }
-      else { ctx.fillStyle = '#171a2a'; ctx.fillRect(x + 1, y + 1, T - 1, T - 1); }
+      if (tiles.has(c + ',' + r)) { c2.fillStyle = '#000'; c2.fillRect(x, y, T, T); }
+      else { c2.fillStyle = '#171a2a'; c2.fillRect(x + 1, y + 1, T - 1, T - 1); }
     }
   }
 
@@ -387,25 +633,24 @@ button:disabled { color: var(--dim); cursor: default; }
   }
 
   function render() {
-    drawMap();
+    if (!S) return;
+    drawMapTo(ctx, S.path.tiles);
 
-    // hover preview (mouse only)
-    if (hover && !S.over && !S.won) {
-      const [c, r] = hover, key = c + ',' + r;
+    if (hover && !S.ended) {
+      const [c, r] = hover;
       const occupied = S.towers.some(tw => tw.c === c && tw.r === r);
-      if (!pathTiles.has(key) && !occupied) {
+      if (!S.path.tiles.has(c + ',' + r) && !occupied) {
         ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(c * T + 1, r * T + 1, T - 1, T - 1);
-        ring(c * T + T / 2, r * T + T / 2, TYPES[S.type].range, 'rgba(255,255,255,0.35)');
+        ring(c * T + T / 2, r * T + T / 2, S.types[S.type].range, 'rgba(255,255,255,0.35)');
       }
     }
 
     for (const tw of S.towers) drawTower(tw);
     if (S.sel) {
-      ctx.strokeStyle = '#fff'; ctx.strokeRect(S.sel.c * T + 1.5, S.sel.r * T + 1.5, 17, 17);
-      ring(S.sel.x, S.sel.y, TYPES[S.sel.type].range, 'rgba(255,255,255,0.45)');
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(S.sel.c * T + 1.5, S.sel.r * T + 1.5, 17, 17);
+      ring(S.sel.x, S.sel.y, S.types[S.sel.type].range, 'rgba(255,255,255,0.45)');
     }
 
-    // beams
     for (const tw of S.towers) if (tw.type === 'beam' && tw.tgt && !tw.tgt.dead) {
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(S.t * 40);
       ctx.strokeStyle = CH[tw.ch].css; ctx.lineWidth = 2;
@@ -413,7 +658,6 @@ button:disabled { color: var(--dim); cursor: default; }
       ctx.globalAlpha = 1;
     }
 
-    // enemies: colour is health, thin white outline keeps them visible on the black path
     for (const e of S.enemies) {
       const x = Math.round(e.x) - 5, y = Math.round(e.y) - 5;
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 12, 12);
@@ -425,39 +669,66 @@ button:disabled { color: var(--dim); cursor: default; }
     for (const f of S.fx) { ctx.globalAlpha = Math.max(0, f.life / 0.35); ctx.fillStyle = '#fff'; ctx.fillRect(Math.round(f.x), Math.round(f.y), 2, 2); }
     ctx.globalAlpha = 1;
 
-    if (S.over || S.won) {
-      ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0, H / 2 - 30, W, 60);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = '12px "Press Start 2P", monospace';
-      ctx.fillText(S.won ? 'MAP CLEARED' : 'GAME OVER', W / 2, H / 2 - 8);
+    if (S.ended) {
+      ctx.fillStyle = 'rgba(0,0,0,0.75)'; ctx.fillRect(0, H / 2 - 36, W, 72);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fff'; ctx.font = '12px "Press Start 2P", monospace';
+      ctx.fillText(S.won ? 'LEVEL CLEARED' : 'GAME OVER', W / 2, H / 2 - 14);
       ctx.font = '8px "Press Start 2P", monospace';
       ctx.fillStyle = '#8b90b0';
-      ctx.fillText(S.won ? 'ALL 10 WAVES HELD' : 'REACHED WAVE ' + S.wave, W / 2, H / 2 + 12);
+      ctx.fillText(S.won ? 'ALL ' + S.L.waves + ' WAVES HELD' : 'REACHED WAVE ' + S.wave, W / 2, H / 2 + 4);
+      ctx.fillStyle = '#ffd54a';
+      ctx.fillText('+' + S.xpGain + ' XP', W / 2, H / 2 + 20);
     }
   }
 
-  // ---------- UI sync ----------
+  function drawHeat() {
+    const hc = $('heat'), h2 = hc.getContext('2d');
+    const heat = P.heat;
+    const L = LEVELS[(heat ? heat.lv : 1) - 1];
+    drawMapTo(h2, buildPath(L.path).tiles);
+    const avail = Math.min(hc.parentElement.getBoundingClientRect().width || W, 360);
+    const s = avail >= W * 2 ? 2 : avail / W;
+    hc.style.width = W * s + 'px'; hc.style.height = H * s + 'px';
+    if (!heat) { $('heat-note').textContent = 'PLAY A LEVEL TO SEE IT'; return; }
+    const max = Math.max(1, ...heat.counts);
+    heat.counts.forEach((n, i) => {
+      if (!n) return;
+      const c = i % COLS, r = Math.floor(i / COLS);
+      h2.fillStyle = `rgba(255,213,74,${0.25 + 0.75 * n / max})`;
+      h2.fillRect(c * T + 1, r * T + 1, T - 1, T - 1);
+    });
+    $('heat-note').textContent = 'LEVEL ' + heat.lv + ' · BRIGHTER = MORE KILLS';
+  }
+
+  // ================= UI sync =================
   const ui = {};
   function set(id, prop, val) {
-    const k = id + prop; if (ui[k] === val) return; ui[k] = val;
-    if (prop === 'text') $(id).textContent = val;
-    else if (prop === 'hidden') $(id).hidden = val;
-    else if (prop === 'disabled') $(id).disabled = val;
-    else $(id).setAttribute(prop, val);
+    const k = id + '|' + prop; if (ui[k] === val) return; ui[k] = val;
+    const el = $(id);
+    if (prop === 'text') el.textContent = val;
+    else if (prop === 'hidden') el.hidden = val;
+    else if (prop === 'disabled') el.disabled = val;
+    else el.setAttribute(prop, val);
   }
   function syncUI() {
+    if (!S || current !== 'game') return;
+    set('lvl', 'text', String(S.lv));
     set('lives', 'text', String(S.lives));
     set('coins', 'text', String(S.coins));
-    set('wave', 'text', S.wave + '/' + MAX_WAVE);
-    [0,1,2].forEach(i => set('ch' + i, 'aria-pressed', String(S.ch === i)));
+    set('wave', 'text', S.wave + '/' + S.L.waves);
+    [0, 1, 2].forEach(i => set('ch' + i, 'aria-pressed', String(S.ch === i)));
     set('tshot', 'aria-pressed', String(S.type === 'shot'));
     set('tbeam', 'aria-pressed', String(S.type === 'beam'));
     set('spd', 'text', S.speed + 'X');
-    if (S.over || S.won) { set('go', 'text', 'PLAY AGAIN'); set('go', 'disabled', false); }
-    else if (S.active) { set('go', 'text', 'WAVE ' + S.wave + ' LIVE'); set('go', 'disabled', true); }
+    set('quit', 'text', S.quitArm > 0 ? 'QUIT?' : 'MENU');
+    set('build', 'hidden', S.ended);
+    set('end', 'hidden', !S.ended);
+    set('next', 'hidden', !(S.won && S.lv < LEVELS.length));
+    if (S.active) { set('go', 'text', 'WAVE ' + S.wave + ' LIVE'); set('go', 'disabled', true); }
     else { set('go', 'text', 'SEND WAVE ' + (S.wave + 1)); set('go', 'disabled', false); }
-    if (S.sel) {
-      set('msg', 'text', CH[S.sel.ch].name + ' ' + TYPES[S.sel.type].name);
+    if (S.sel && !S.ended) {
+      set('msg', 'text', CH[S.sel.ch].name + ' ' + S.types[S.sel.type].name);
       set('sell', 'text', 'SELL +' + Math.floor(S.sel.cost * 0.7));
       set('sell', 'hidden', false);
       set('msg', 'class', 'msg');
@@ -468,10 +739,11 @@ button:disabled { color: var(--dim); cursor: default; }
     }
   }
 
-  // ---------- sizing ----------
+  // ================= sizing =================
   const stage = $('stage');
   function fit() {
     const r = stage.getBoundingClientRect();
+    if (!r.width || !r.height) return;
     let s = Math.min(r.width / W, r.height / H);
     if (s >= 2) s = Math.floor(s);
     s = Math.max(s, 0.5);
@@ -479,17 +751,19 @@ button:disabled { color: var(--dim); cursor: default; }
     cvs.style.height = H * s + 'px';
   }
   new ResizeObserver(fit).observe(stage);
-  fit();
 
-  // ---------- loop ----------
+  // ================= loop =================
   const DT = 1 / 60; let acc = 0, last = performance.now();
   function frame(now) {
     acc += Math.min(0.1, (now - last) / 1000); last = now;
-    while (acc >= DT) { for (let i = 0; i < S.speed; i++) step(DT); acc -= DT; }
-    render(); syncUI();
+    while (acc >= DT) {
+      if (S && current === 'game') for (let i = 0; i < S.speed; i++) step(DT);
+      acc -= DT;
+    }
+    if (current === 'game') { render(); syncUI(); }
     requestAnimationFrame(frame);
   }
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => render());
+  show('menu');
   requestAnimationFrame(frame);
 })();
 </script>

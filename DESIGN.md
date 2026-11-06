@@ -32,22 +32,39 @@ A tower defence game for phones, built web-first. Enemies walk from the top of t
 - 1 coin per 20 colour points drained, so overkill earns nothing.
 - Wave clear bonus: 20 + 2 × wave number.
 
-## Waves (map 1)
+## Levels
 
-- Early waves are a single colour (red first, then green, then blue).
-- Later waves mix single-colour enemies.
-- Mixed-colour enemies (yellow, magenta, cyan, white) arrive once C/M/Y towers unlock.
-- 10 waves to clear the map. 10 lives.
+Level N has N enemy colours. Each level has its own map and 10 lives.
 
-## Progression (planned)
+| Level | Name | Colours | Waves | How the new colour arrives |
+|-------|------|---------|-------|----------------------------|
+| 1 | Red Alert | Red | 8 | Red only |
+| 2 | Green Shift | Red, green | 10 | Waves 1–2 green alone, wave 3 red, then mixed |
+| 3 | Full Spectrum | Red, green, blue | 12 | Waves 1–2 blue alone, wave 3 red and green, then all three |
 
-- Players beat maps and earn XP for every attempt, including losses.
-- Between rounds, XP unlocks:
-  - Cyan, magenta and yellow shooters (each drains two channels at reduced strength)
-  - Tower upgrades
-  - Stats screen
-  - Heat map of where enemies died
-- Enemy complexity is gated behind unlocks, so the unlock tree doubles as the tutorial.
+- Clearing a level unlocks the next.
+- Each enemy is still a single primary colour. Mixed-colour enemies (yellow, magenta, cyan, white) arrive once C/M/Y towers unlock.
+- Waves get longer, faster and more tightly spaced as they go.
+- The tower colour buttons only show the colours a level uses.
+
+## Menu
+
+- Main menu: Levels, Upgrades, Stats, How to play.
+- Quitting mid-run takes two taps and still banks XP for the attempt.
+- After a run: Retry, Next (after a win) or Menu.
+
+## Progression
+
+- XP for every attempt: 5 per wave cleared, 1 per enemy drained, plus 50 × level number for a clear.
+- Upgrades bought with XP, three tiers each:
+  - Shot power: +5 damage per hit
+  - Beam power: +8 drain per second
+  - Long sight: +10% tower range
+  - War chest: +25 starting coin
+- Stats: runs, clears, kills, leaks, points drained per colour, XP earned, best wave per level.
+- Heat map of where enemies died in the last run.
+- Progress is saved in the browser.
+- Planned unlocks: cyan, magenta and yellow shooters (each drains two channels at reduced strength).
 
 ## Smarter enemies (later)
 
@@ -64,9 +81,9 @@ A tower defence game for phones, built web-first. Enemies walk from the top of t
 
 ## Milestones
 
-1. **Core loop** (current prototype): one map, R/G/B shot and beam towers, 10 waves, coins, lives, win and lose.
-2. **Between-round layer**: XP, unlock screen, saved progress.
-3. **Stats and heat map**, then C/M/Y towers, then smarter enemies.
+1. **Core loop** (done): one map, R/G/B shot and beam towers, 10 waves, coins, lives, win and lose.
+2. **Menu, levels and XP** (done): three levels, upgrades, stats, heat map, saved progress.
+3. **Next**: C/M/Y towers and mixed-colour enemies, then smarter enemies.
 
 ## Tech
 
