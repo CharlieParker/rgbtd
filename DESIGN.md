@@ -21,9 +21,12 @@ A tower defence game for phones, built web-first. Enemies walk from the top of t
 
 | Type | Behaviour | Cost | Notes |
 |------|-----------|------|-------|
-| Shot | Bullets, 40 per hit, every 0.9 s | 40 | Can overkill an almost-dead enemy |
-| Beam | Continuous drain, 45 per second | 60 | Never wastes damage, shorter range |
+| Shooter | Bullets, 40 per hit, every 0.9 s | 40 | Available from the start. Can overkill an almost-dead enemy |
+| Beam | Continuous drain, 45 per second | 60 | Unlocked per colour with XP. Never wastes damage, shorter range |
 
+- Placing: the first tap on a free tile shows a see-through preview with its range; a second tap on the same tile builds it.
+- Choosing a colour shows which tower types that colour has. A locked beam shows as locked.
+- Turrets aim at their target with a barrel snapped to 16 directions. Shooters recoil with a muzzle flash and their core dims while reloading. Beams pulse while draining. Idle turrets slowly scan.
 - No cap on tower count. Limits are buildable space and coins.
 - Selling refunds 70%.
 
@@ -56,7 +59,8 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 ## Progression
 
 - XP for every attempt: 5 per wave cleared, 1 per enemy drained, plus 50 × level number for a clear.
-- Upgrades bought with XP, three tiers each:
+- Beam unlocks bought with XP, one per colour: red 40, green 60, blue 80. A colour's beam becomes available once its level is open.
+- Upgrades bought with XP, three tiers each (beam power needs a beam unlocked first):
   - Shot power: +5 damage per hit
   - Beam power: +8 drain per second
   - Long sight: +10% tower range
@@ -76,6 +80,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 
 - Absorbers: enemies healed by one colour.
 - Shifters: enemies that move health between channels.
+- Leak damage proportional to the leaking enemy's remaining colour.
 - Colour-blind mode: optional per-channel bars or patterns on enemies.
 - Wrap as a phone app (Capacitor) or installable web app.
 
