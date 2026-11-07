@@ -264,6 +264,7 @@ button:disabled { color: var(--dim); cursor: default; }
       cols: mix(w),
       spd: 0.9 + w * 0.05 + (n - 1) * 0.05,
       gap: Math.max(0.42, 0.9 - w * 0.045),
+      tough: 1,
     });
   }
   const LEVELS = [
@@ -278,16 +279,17 @@ button:disabled { color: var(--dim); cursor: default; }
       wave: campaignWave(3, w => w <= 2 ? [B] : w === 3 ? [R,G] : [R,G,B]) },
   ];
   // Endless: a long snaking path with two-row build strips between each pass.
-  // Two-colour enemies join at wave 11, white at wave 21, any-RGB colours at wave 31.
+  // Two-colour enemies join at wave 6, white at wave 13, any-RGB colours at wave 19.
+  // Enemies get tougher every wave, and coin is scarcer than in the campaign.
   // Waves keep getting longer and faster.
   const ENDLESS = {
     id: 'E', n: 0, name: 'ENDLESS', chans: [0,1,2], waves: Infinity, endless: true,
     path: [[1,-1],[1,1],[7,1],[7,4],[1,4],[1,7],[7,7],[7,10],[1,10],[1,12],[7,12],[7,14]],
     wave: w => {
       const cols = [R, G, B];
-      if (w > 10) cols.push(Y, C, M);
-      if (w > 20) cols.push(WH);
-      if (w > 30) {               // any-RGB enemies: three new colours per wave, channels in 64 steps
+      if (w > 5) cols.push(Y, C, M);
+      if (w > 12) cols.push(WH);
+      if (w > 18) {               // any-RGB enemies: three new colours per wave, channels in 64 steps
         const rnd = seeded(w * 9973);
         for (let i = 0; i < 3; i++) {
           let c;
@@ -296,10 +298,12 @@ button:disabled { color: var(--dim); cursor: default; }
         }
       }
       return {
-        count: 6 + Math.floor(w * 1.6),
+        count: 6 + Math.floor(w * 1.8),
         cols,
-        spd: Math.min(2.2, 0.95 + w * 0.035),
-        gap: Math.max(0.3, 0.85 - w * 0.02),
+        spd: Math.min(2.6, 0.95 + w * 0.045),
+        gap: Math.max(0.28, 0.85 - w * 0.025),
+        // toughness divides all damage taken; it grows 6% per wave, so every endless run ends eventually
+        tough: Math.pow(1.06, w - 1),
       };
     },
   };
@@ -319,7 +323,7 @@ button:disabled { color: var(--dim); cursor: default; }
       groups.set(k, { c, n: (groups.get(k)?.n || 0) + 1 });
       for (let j = 0; j < 3; j++) tot[j] += c[j];
     }
-    return { groups: [...groups.values()].sort((a, b) => b.n - a.n), tot, count: d.count };
+    return { groups: [...groups.values()].sort((a, b) => b.n - a.n), tot, count: d.count, tough: d.tough || 1 };
   }
   function seeded(seed) {   // small deterministic RNG so a given endless wave is always the same
     let t = seed >>> 0;
@@ -544,7 +548,7 @@ button:disabled { color: var(--dim); cursor: default; }
     S = {
       L, path: buildPath(L.path), types: towerStats(),
       lives: 10 + P.up.lives, coins: 120 + 10 * P.up.coin, coinFrac: 0,
-      coinPer: COIN_PER_POINTS / (1 + 0.03 * P.up.bounty),
+      coinPer: COIN_PER_POINTS * (L.endless ? 2 : 1) / (1 + 0.03 * P.up.bounty),   // endless pays half
       wave: 0, active: false, queue: [], gap: 0.8, spawnT: 0, autoT: 0,   // the first wave is always sent by hand
       enemies: [], towers: [], bullets: [], fx: [],
       sel: null, ghost: null, ch: L.chans[0], type: 'shot', speed: 1,
@@ -565,11 +569,11 @@ button:disabled { color: var(--dim); cursor: default; }
     if (!S || S.ended || S.active) return;
     S.wave++;
     const d = S.L.wave(S.wave);
-    S.queue = Array.from({ length: d.count }, (_, i) => ({ c: [...d.cols[i % d.cols.length]], spd: d.spd }));
+    S.queue = Array.from({ length: d.count }, (_, i) => ({ c: [...d.cols[i % d.cols.length]], spd: d.spd, tough: d.tough }));
     S.gap = d.gap; S.spawnT = 0; S.active = true; S.autoT = 0;
-    if (S.L.endless && S.wave === 11) say('NEW: TWO-COLOUR ENEMIES', true);
-    else if (S.L.endless && S.wave === 21) say('NEW: WHITE ENEMIES', true);
-    else if (S.L.endless && S.wave === 31) say('NEW: ANY-COLOUR ENEMIES', true);
+    if (S.L.endless && S.wave === 6) say('NEW: TWO-COLOUR ENEMIES', true);
+    else if (S.L.endless && S.wave === 13) say('NEW: WHITE ENEMIES', true);
+    else if (S.L.endless && S.wave === 19) say('NEW: ANY-COLOUR ENEMIES', true);
     else if (!S.L.endless && d.cols.length === 1 && S.wave <= 2 && S.L.n > 1)
       say('NEW: ' + colourName(d.cols[0]) + ' ENEMIES', true);
     else say('WAVE ' + S.wave + ' INCOMING');
@@ -577,7 +581,7 @@ button:disabled { color: var(--dim); cursor: default; }
 
   function drain(e, ch, amt) {
     const before = e.c[ch];
-    e.c[ch] = Math.max(0, before - amt);
+    e.c[ch] = Math.max(0, before - amt / e.tough);
     const got = before - e.c[ch];
     S.drained[ch] += got;
     S.coinFrac += got / S.coinPer;
@@ -642,7 +646,7 @@ button:disabled { color: var(--dim); cursor: default; }
       if (S.spawnT <= 0) {
         const q = S.queue.shift();
         const [x, y] = posAt(S.path, 0);
-        S.enemies.push({ d: 0, x, y, c: q.c, spd: q.spd * T, dead: false });
+        S.enemies.push({ d: 0, x, y, c: q.c, spd: q.spd * T, tough: q.tough, dead: false });
         S.spawnT = S.gap;
       }
     }
@@ -709,7 +713,7 @@ button:disabled { color: var(--dim); cursor: default; }
     if (S.active && !S.queue.length && !S.enemies.length) {
       S.active = false;
       if (S.wave >= S.L.waves) { endRun(true); return; }
-      const bonus = 20 + S.wave * 2;
+      const bonus = S.L.endless ? 15 + S.wave : 20 + S.wave * 2;
       S.coins += bonus;
       say('WAVE ' + S.wave + ' CLEAR +' + bonus);
       if (P.auto) S.autoT = 3;
@@ -817,6 +821,7 @@ button:disabled { color: var(--dim); cursor: default; }
     el.innerHTML = `
       <span>NEXT</span>
       <span class="groups">${shown.map(g => `<span class="cnt" title="${colourName(g.c)}"><span class="sw" style="background:${rgbCss(g.c)}"></span>${g.n}</span>`).join('')}${more > 0 ? `<span>+${more}</span>` : ''}</span>
+      ${sm.tough > 1.05 ? `<span class="xp" title="Enemies take this many times longer to drain">×${sm.tough.toFixed(1)}</span>` : ''}
       <span class="mixbar" title="Red, green and blue share of this wave">${[0, 1, 2].map(k => sm.tot[k] ? `<span class="${CH[k].cls}" style="flex:${sm.tot[k] / sum}"></span>` : '').join('')}</span>`;
   }
 

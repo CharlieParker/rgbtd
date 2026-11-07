@@ -19,7 +19,7 @@ The game must support any enemy colour RGB can express, not just the seven pure 
 - Names are display-only: the seven pure colours get words (red, yellow, cyan...); anything else shows as its hex code, e.g. `#FF8000`.
 - UI summaries are derived from triples: colour swatches drawn from the triple, counts grouped by exact triple, and a red/green/blue bar showing the total of each channel. This works the same for 3 colours or 300.
 - Towers drain channels. Future two-channel (C/M/Y) towers fit the same model.
-- Endless already uses any-RGB enemies from wave 31 (three new colours per wave, channels in steps of 64).
+- Endless already uses any-RGB enemies from wave 19 (three new colours per wave, channels in steps of 64).
 - Still to do: campaign levels that use in-between colours, and balance for partly-filled channels.
 
 ## Look
@@ -69,8 +69,11 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 
 - Unlocked by clearing Level 1. A separate run mode, also useful for testing.
 - Map: a long snaking path with two-row build strips between each pass, plus both side columns.
-- Waves never end. Each wave has more enemies (6 + 1.6 × wave), moves faster (capped) and spawns tighter.
-- Enemy colours: red, green and blue to start; yellow, cyan and magenta (two channels each) join from wave 11; white (all three) joins from wave 21; any-RGB colours (three new ones per wave, the same every time for a given wave) from wave 31.
+- Waves never end. Each wave has more enemies (6 + 1.8 × wave), moves faster (capped) and spawns tighter.
+- Toughness: all damage to endless enemies is divided by 1.06^(wave − 1) (×1.7 at wave 10, ×5.4 at 30, ×31 at 60). Colour still shows remaining health; tough enemies just drain slower. The preview shows the multiplier.
+- Economy: endless pays half the campaign's coin per colour point, and the wave bonus is 15 + wave. Coin per enemy doesn't grow with toughness, so income falls behind.
+- First balance (no toughness, full coin) let a first run reach wave 82 with 120k+ coin; this pass is meant to end runs in the 30s–50s for now.
+- Enemy colours: red, green and blue to start; yellow, cyan and magenta (two channels each) join from wave 6; white (all three) joins from wave 13; any-RGB colours (three new ones per wave, the same every time for a given wave) from wave 19.
 - XP: as campaign, plus a bonus of wave² ÷ 4, so deep runs pay off.
 
 ## Menu
