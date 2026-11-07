@@ -100,7 +100,9 @@ button:disabled { color: var(--dim); cursor: default; }
 .sw { width: 10px; height: 10px; outline: 1px solid var(--ink); flex: 0 0 auto; }
 .sw.r { background: var(--r); } .sw.g { background: var(--g); } .sw.b { background: var(--b); }
 #go { flex: 3; padding-block: 12px; }
-#sell { flex: 0 0 auto; padding: 8px; }
+#twr .up { flex-direction: column; gap: 4px; padding-block: 8px; white-space: normal; }
+#twr .up small { font-size: 8px; color: var(--dim); }
+#twr .up.max small { color: var(--warn); }
 
 /* level + upgrade cards */
 .card {
@@ -195,7 +197,7 @@ button:disabled { color: var(--dim); cursor: default; }
       <p>TAP A TILE TO PREVIEW A TOWER.<br><span>TAP THE SAME TILE AGAIN TO BUILD IT.</span></p>
       <p>SHOOTERS FIRE BULLETS.<br><span>BIG HITS, LONGER RANGE, CAN WASTE DAMAGE.</span></p>
       <p>BEAMS DRAIN NONSTOP.<br><span>UNLOCK EACH COLOUR'S BEAM WITH XP. NO WASTE, SHORTER RANGE.</span></p>
-      <p>DRAINING COLOUR EARNS COIN.<br><span>TAP A BUILT TOWER TO SEE ITS RANGE OR SELL IT.</span></p>
+      <p>DRAINING COLOUR EARNS COIN.<br><span>TAP A BUILT TOWER TO UPGRADE IT WITH COIN, OR SELL IT. YELLOW DOTS SHOW ITS LEVEL.</span></p>
       <p>EVERY ATTEMPT EARNS XP.<br><span>SPEND IT ON UPGRADES BETWEEN RUNS.</span></p>
     </div>
   </section>
@@ -213,7 +215,17 @@ button:disabled { color: var(--dim); cursor: default; }
     <div id="stage"><canvas id="map" width="180" height="280" aria-label="Game map"></canvas></div>
     <div id="info">
       <span class="msg" id="msg">PICK A COLOUR, TAP A TILE</span>
-      <button id="sell" hidden>SELL</button>
+    </div>
+    <div id="twr" class="stack" hidden>
+      <div class="row">
+        <button id="u0" class="up"></button>
+        <button id="u1" class="up"></button>
+        <button id="u2" class="up"></button>
+      </div>
+      <div class="row">
+        <button id="sell">SELL</button>
+        <button id="done">DONE</button>
+      </div>
     </div>
     <div id="build" class="stack">
       <div class="row" role="group" aria-label="Tower colour" id="ch-row">
@@ -664,7 +676,7 @@ button:disabled { color: var(--dim); cursor: default; }
     }
 
     for (const tw of S.towers) {
-      const ty = S.types[tw.type];
+      const ty = tStat(tw);
       if (!tw.tgt || tw.tgt.dead || tw.tgt.c[tw.ch] <= 0 ||
           Math.hypot(tw.tgt.x - tw.x, tw.tgt.y - tw.y) > ty.range) tw.tgt = target(tw, ty.range);
       tw.recoil = Math.max(0, tw.recoil - dt * 5);
@@ -725,6 +737,34 @@ button:disabled { color: var(--dim); cursor: default; }
     }
   }
 
+  // ================= in-run tower upgrades =================
+  // Tap a built tower to spend coin on it. Each stat has 5 levels; price rises with each level bought.
+  const TUP_MAX = 5;
+  const TUP = {
+    shot: [ { k: 'dmg', name: 'DMG', desc: '+25%' }, { k: 'rng', name: 'RANGE', desc: '+10%' }, { k: 'rate', name: 'RELOAD', desc: '-10%' } ],
+    beam: [ { k: 'dmg', name: 'POWER', desc: '+25%' }, { k: 'rng', name: 'RANGE', desc: '+10%' } ],
+  };
+  const tUpCost = (tw, l) => Math.round(tw.cost * 0.6 * (l + 1));
+  const sellValue = tw => Math.floor((tw.cost + (tw.spent || 0)) * 0.7);
+  function tStat(tw) {
+    const b = S.types[tw.type], l = tw.lv || { dmg: 0, rng: 0, rate: 0 };
+    return {
+      range: b.range * (1 + 0.1 * l.rng),
+      dmg: (b.dmg || 0) * (1 + 0.25 * l.dmg),
+      dps: (b.dps || 0) * (1 + 0.25 * l.dmg),
+      rate: (b.rate || 0) * (1 - 0.1 * l.rate),
+    };
+  }
+  [0, 1, 2].forEach(i => $('u' + i).addEventListener('click', () => {
+    const tw = S && S.sel; if (!tw) return;
+    const u = TUP[tw.type][i]; if (!u) return;
+    const l = tw.lv[u.k], price = tUpCost(tw, l);
+    if (l >= TUP_MAX || S.coins < price) return;
+    S.coins -= price; tw.spent += price; tw.lv[u.k]++;
+    say(u.name + ' UPGRADED');
+  }));
+  $('done').addEventListener('click', () => { if (S) S.sel = null; });
+
   // ================= input =================
   const cvs = $('map');
   const ctx = cvs.getContext('2d');
@@ -752,7 +792,8 @@ button:disabled { color: var(--dim); cursor: default; }
     if (S.coins < ty.cost) { say('NEED ' + ty.cost + ' COIN', true); return; }
     S.coins -= ty.cost;
     S.towers.push({ c, r, x: c * T + T / 2, y: r * T + T / 2, ch: S.ch, type: S.type,
-      cd: 0, tgt: null, cost: ty.cost, ang: -Math.PI / 2, recoil: 0, firing: false });
+      cd: 0, tgt: null, cost: ty.cost, spent: 0, lv: { dmg: 0, rng: 0, rate: 0 },
+      ang: -Math.PI / 2, recoil: 0, firing: false });
     S.ghost = null;
     say(CH[S.ch].name + ' ' + ty.name + ' BUILT');
   });
@@ -770,7 +811,7 @@ button:disabled { color: var(--dim); cursor: default; }
   $('spd').addEventListener('click', () => { S.speed = S.speed === 3 ? 1 : S.speed + 1; });
   $('sell').addEventListener('click', () => {
     if (!S.sel) return;
-    const refund = Math.floor(S.sel.cost * 0.7);
+    const refund = sellValue(S.sel);
     S.coins += refund;
     S.towers = S.towers.filter(tw => tw !== S.sel);
     S.sel = null;
@@ -852,12 +893,18 @@ button:disabled { color: var(--dim); cursor: default; }
     const tx = Math.round(cx + dx * len) - 1, ty = Math.round(cy + dy * len) - 1;
     ctx.fillStyle = CH[tw.ch].css; ctx.fillRect(tx, ty, 2, 2);
 
+    if (tw.lv) {   // one yellow pixel per upgrade level along the base's bottom edge
+      const n = tw.lv.dmg + tw.lv.rng + tw.lv.rate;
+      ctx.fillStyle = '#ffd54a';
+      for (let i = 0; i < n; i++) ctx.fillRect(x + 3 + i, y + 16, 1, 1);
+    }
+
     if (tw.type === 'shot') {
       if (tw.recoil > 0.7) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(Math.round(cx + dx * (len + 2)) - 1, Math.round(cy + dy * (len + 2)) - 1, 3, 3);
       }
-      const ready = 1 - tw.cd / S.types.shot.rate;
+      const ready = 1 - tw.cd / (tw.lv ? tStat(tw).rate : S.types.shot.rate);
       ctx.fillStyle = '#12141f'; ctx.fillRect(cx - 4, cy - 4, 8, 8);
       ctx.globalAlpha *= 0.35 + 0.65 * ready;
       ctx.fillStyle = CH[tw.ch].css; ctx.fillRect(cx - 3, cy - 3, 6, 6);
@@ -907,7 +954,7 @@ button:disabled { color: var(--dim); cursor: default; }
 
     if (S.sel) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.strokeRect(S.sel.c * T + 1.5, S.sel.r * T + 1.5, 17, 17);
-      ring(S.sel.x, S.sel.y, S.types[S.sel.type].range, 'rgba(255,255,255,0.45)');
+      ring(S.sel.x, S.sel.y, tStat(S.sel).range, 'rgba(255,255,255,0.45)');
     }
 
     for (const tw of S.towers) if (tw.type === 'beam' && tw.firing && tw.tgt && !tw.tgt.dead) {
@@ -970,6 +1017,7 @@ button:disabled { color: var(--dim); cursor: default; }
     if (prop === 'text') el.textContent = val;
     else if (prop === 'hidden') el.hidden = val;
     else if (prop === 'disabled') el.disabled = val;
+    else if (prop === 'html') el.innerHTML = val;
     else el.setAttribute(prop, val);
   }
   function syncUI() {
@@ -987,7 +1035,20 @@ button:disabled { color: var(--dim); cursor: default; }
     set('tbeam', 'text', hasBeam(S.ch) ? CH[S.ch].name + ' BEAM ' + S.types.beam.cost : 'BEAM LOCKED');
     set('spd', 'text', S.speed + 'X');
     set('quit', 'text', S.quitArm > 0 ? 'QUIT?' : 'MENU');
-    set('build', 'hidden', S.ended);
+    set('build', 'hidden', S.ended || !!S.sel);
+    set('twr', 'hidden', S.ended || !S.sel);
+    if (S.sel && !S.ended) {
+      const ups = TUP[S.sel.type];
+      for (let i = 0; i < 3; i++) {
+        const u = ups[i];
+        set('u' + i, 'hidden', !u);
+        if (!u) continue;
+        const l = S.sel.lv[u.k], maxed = l >= TUP_MAX, price = tUpCost(S.sel, l);
+        set('u' + i, 'html', `${u.name} ${l}/${TUP_MAX}<small>${maxed ? 'MAXED' : u.desc + ' · ' + price + '¢'}</small>`);
+        set('u' + i, 'disabled', maxed || S.coins < price);
+        set('u' + i, 'class', maxed ? 'up max' : 'up');
+      }
+    }
     set('end', 'hidden', !S.ended);
     set('next', 'hidden', !(S.won && S.L.n < LEVELS.length));
     set('auto', 'aria-pressed', String(!!P.auto));
@@ -995,18 +1056,16 @@ button:disabled { color: var(--dim); cursor: default; }
     else if (P.auto && S.autoT > 0) { set('go', 'text', 'WAVE ' + (S.wave + 1) + ' IN ' + Math.ceil(S.autoT)); set('go', 'disabled', false); }
     else { set('go', 'text', 'SEND WAVE ' + (S.wave + 1)); set('go', 'disabled', false); }
     if (S.sel && !S.ended) {
-      set('msg', 'text', CH[S.sel.ch].name + ' ' + S.types[S.sel.type].name);
-      set('sell', 'text', 'SELL +' + Math.floor(S.sel.cost * 0.7));
-      set('sell', 'hidden', false);
+      const lv = S.sel.lv.dmg + S.sel.lv.rng + S.sel.lv.rate;
+      set('msg', 'text', CH[S.sel.ch].name + ' ' + S.types[S.sel.type].name + (lv ? ' · LV ' + lv : ''));
+      set('sell', 'text', 'SELL +' + sellValue(S.sel));
       set('msg', 'class', 'msg');
     } else if (S.ghost && !S.ended) {
       const ty = S.types[S.type], short = S.coins < ty.cost;
       set('msg', 'text', short ? 'NEED ' + ty.cost + ' COIN' : 'TAP AGAIN TO BUILD');
-      set('sell', 'hidden', true);
       set('msg', 'class', short ? 'msg alert' : 'msg');
     } else {
       set('msg', 'text', S.msg);
-      set('sell', 'hidden', true);
       set('msg', 'class', S.alert ? 'msg alert' : 'msg');
     }
   }

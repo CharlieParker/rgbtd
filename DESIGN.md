@@ -40,7 +40,8 @@ The game must support any enemy colour RGB can express, not just the seven pure 
 - Choosing a colour shows which tower types that colour has. A locked beam shows as locked.
 - Turrets aim at their target with a barrel snapped to 16 directions. Shooters recoil with a muzzle flash and their core dims while reloading. Beams pulse while draining. Idle turrets slowly scan.
 - No cap on tower count. Limits are buildable space and coins.
-- Selling refunds 70%.
+- In-run upgrades: tap a built tower to open its panel and spend coin on it. Shooters have damage (+25%), range (+10%) and reload (−10%); beams have power (+25%) and range (+10%). Each stat has 5 levels; level n costs 0.6 × tower cost × n. Yellow pixels on the tower's base show its total upgrade level.
+- Selling refunds 70% of the tower's cost plus everything spent upgrading it.
 
 ## Economy
 
@@ -112,6 +113,10 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 
 ## Ideas parked for later
 
+- Tower merging: combine two primary towers into a secondary (red + green = yellow, which drains both channels). A candidate way to introduce C/M/Y towers instead of unlocking them with XP. Inspired by Element TD and Gem TD.
+- Endless perk picks: every few endless waves, choose one of three random perks that last the rest of the run (e.g. +20% red damage, longer beam range). Inspired by roguelite tower defence games like Rogue Tower.
+- Star ratings: 1–3 stars per campaign level based on lives left, to reward replaying (Kingdom Rush).
+- Splitting enemies: a white enemy that splits into red, green and blue when hit (Bloons TD 6's layers).
 - Absorbers: enemies healed by one colour.
 - Shifters: enemies that move health between channels.
 - Leak damage proportional to the leaking enemy's remaining colour.
@@ -123,7 +128,8 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 1. **Core loop** (done): one map, R/G/B shot and beam towers, 10 waves, coins, lives, win and lose.
 2. **Menu, levels and XP** (done): three levels, upgrades, stats, heat map, saved progress.
 3. **Endless, auto waves, deep upgrades, wave preview, any-RGB support** (done).
-4. **Next**: C/M/Y towers, then smarter enemies.
+4. **In-run tower upgrades** (done).
+5. **Next**: candidates are star ratings, tower merging (C/M/Y), endless perks, smarter enemies.
 
 ## Tech
 

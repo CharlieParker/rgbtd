@@ -7,3 +7,4 @@ See [DESIGN.md](DESIGN.md) for the design.
 ## Feature ideas
 
 - **Leak damage proportional to health:** an enemy that gets through costs lives in proportion to the colour it has left. A nearly drained enemy costs little; a full-health one costs the most.
+- **Tower merging:** combine two primary-colour towers into a secondary one, for example red + green = yellow, which drains both channels. A possible way to bring in cyan, magenta and yellow towers. Inspired by Element TD and Gem TD.
