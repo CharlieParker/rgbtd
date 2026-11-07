@@ -10,6 +10,18 @@ A tower defence game for phones, built web-first. Enemies walk from the top of t
 - A red tower cannot hurt a pure green enemy. Building the right mix of colours is the main decision.
 - Towers only target enemies that still have their channel, so shots are never wasted on immune enemies.
 
+## Any RGB colour (design rule)
+
+The game must support any enemy colour RGB can express, not just the seven pure combinations.
+
+- Enemies, waves and levels are defined only as `[r, g, b]` triples, each channel 0–255. Nothing in the game logic depends on colour names.
+- Damage, targeting, death, coins and stats all work per channel, so a `[255, 128, 0]` orange takes 255 red and 128 green to drain.
+- Names are display-only: the seven pure colours get words (red, yellow, cyan...); anything else shows as its hex code, e.g. `#FF8000`.
+- UI summaries are derived from triples: colour swatches drawn from the triple, counts grouped by exact triple, and a red/green/blue bar showing the total of each channel. This works the same for 3 colours or 300.
+- Towers drain channels. Future two-channel (C/M/Y) towers fit the same model.
+- Endless already uses any-RGB enemies from wave 31 (three new colours per wave, channels in steps of 64).
+- Still to do: campaign levels that use in-between colours, and balance for partly-filled channels.
+
 ## Look
 
 - 8-bit, minimal, clear short text. Graphics stay simple while the mechanics are worked out.
@@ -34,6 +46,7 @@ A tower defence game for phones, built web-first. Enemies walk from the top of t
 
 - 1 coin per 20 colour points drained, so overkill earns nothing.
 - Wave clear bonus: 20 + 2 × wave number.
+- Next-wave preview: a strip under the top bar shows up to four enemy colours with counts (most common first, "+N" for the rest) and a bar splitting the wave's total red, green and blue. While a wave is live it previews the one after.
 - AUTO toggle: sends the next wave 3 seconds after a clear (the first wave is always sent by hand). The setting is remembered between runs.
 
 ## Levels
@@ -57,7 +70,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 - Unlocked by clearing Level 1. A separate run mode, also useful for testing.
 - Map: a long snaking path with two-row build strips between each pass, plus both side columns.
 - Waves never end. Each wave has more enemies (6 + 1.6 × wave), moves faster (capped) and spawns tighter.
-- Enemy colours: red, green and blue to start; yellow, cyan and magenta (two channels each) join from wave 11; white (all three) joins from wave 21.
+- Enemy colours: red, green and blue to start; yellow, cyan and magenta (two channels each) join from wave 11; white (all three) joins from wave 21; any-RGB colours (three new ones per wave, the same every time for a given wave) from wave 31.
 - XP: as campaign, plus a bonus of wave² ÷ 4, so deep runs pay off.
 
 ## Menu
@@ -82,7 +95,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 | Bounty | +3% coin per colour drained | 20 | 22 | 1.17 |
 | Thick walls | +1 life | 10 | 40 | 1.30 |
 
-- Saves from the old three-tier system get their spent XP refunded.
+- Stats screen has a two-tap "Reset all progress" button.
 - Stats: runs, clears, kills, leaks, points drained per colour, XP earned, best wave per level, best endless wave.
 - Heat map of where enemies died in the last run.
 - Progress is saved in the browser.
@@ -106,7 +119,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 
 1. **Core loop** (done): one map, R/G/B shot and beam towers, 10 waves, coins, lives, win and lose.
 2. **Menu, levels and XP** (done): three levels, upgrades, stats, heat map, saved progress.
-3. **Endless, auto waves, deep upgrades** (done).
+3. **Endless, auto waves, deep upgrades, wave preview, any-RGB support** (done).
 4. **Next**: C/M/Y towers, then smarter enemies.
 
 ## Tech

@@ -126,6 +126,10 @@ button:disabled { color: var(--dim); cursor: default; }
 .prog span { display: block; height: 100%; background: var(--warn); }
 .note { color: var(--warn); }
 #auto[aria-pressed="true"] { color: var(--warn); }
+.preview { display: flex; align-items: center; gap: 10px; min-height: 18px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.preview .groups { display: flex; flex-wrap: wrap; gap: 4px 10px; flex: 1; min-width: 0; }
+.preview .cnt { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
+.preview .mixbar { width: 54px; flex: 0 0 auto; }
 
 /* stats */
 .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-variant-numeric: tabular-nums; }
@@ -165,7 +169,6 @@ button:disabled { color: var(--dim); cursor: default; }
   <section class="screen" id="scr-upgrades" hidden>
     <div class="top"><button data-go="menu">BACK</button><h2>UPGRADES</h2><span class="xp" id="up-xp">0 XP</span></div>
     <p>XP COMES FROM EVERY ATTEMPT, WIN OR LOSE.</p>
-    <p class="note" id="refund" hidden></p>
     <div class="stack scroll" id="up-list"></div>
   </section>
 
@@ -178,6 +181,7 @@ button:disabled { color: var(--dim); cursor: default; }
       <canvas id="heat" width="180" height="280" aria-label="Where enemies died in your last run"></canvas>
       <p id="heat-note">BRIGHTER TILES = MORE KILLS</p>
     </div>
+    <button id="wipe">RESET ALL PROGRESS</button>
   </section>
 
   <!-- INFO -->
@@ -185,7 +189,8 @@ button:disabled { color: var(--dim); cursor: default; }
     <div class="top"><button data-go="menu">BACK</button><h2>HOW TO PLAY</h2><span></span></div>
     <div class="info-list">
       <p>ENEMIES WALK DOWN THE BLACK PATH.<br><span>STOP THEM REACHING THE BOTTOM.</span></p>
-      <p>AN ENEMY'S COLOUR IS ITS HEALTH.<br><span>EACH OF RED, GREEN, BLUE GOES FROM 255 TO 0. BLACK = DEAD.</span></p>
+      <p>AN ENEMY'S COLOUR IS ITS HEALTH.<br><span>ANY RGB COLOUR. EACH OF RED, GREEN, BLUE GOES DOWN TO 0. BLACK = DEAD.</span></p>
+      <p>THE STRIP UNDER THE TOP BAR PREVIEWS THE NEXT WAVE.<br><span>ENEMY COLOURS WITH COUNTS, AND A BAR OF HOW MUCH RED, GREEN AND BLUE IT CARRIES.</span></p>
       <p>EACH TOWER DRAINS ONE COLOUR.<br><span>A RED TOWER CAN'T HURT A GREEN ENEMY. BUILD THE RIGHT MIX.</span></p>
       <p>TAP A TILE TO PREVIEW A TOWER.<br><span>TAP THE SAME TILE AGAIN TO BUILD IT.</span></p>
       <p>SHOOTERS FIRE BULLETS.<br><span>BIG HITS, LONGER RANGE, CAN WASTE DAMAGE.</span></p>
@@ -204,6 +209,7 @@ button:disabled { color: var(--dim); cursor: default; }
       <span>¢ <b id="coins">120</b></span>
       <span>W <b id="wave">0/8</b></span>
     </div>
+    <div id="preview" class="preview" aria-label="Next wave"></div>
     <div id="stage"><canvas id="map" width="180" height="280" aria-label="Game map"></canvas></div>
     <div id="info">
       <span class="msg" id="msg">PICK A COLOUR, TAP A TILE</span>
@@ -272,7 +278,8 @@ button:disabled { color: var(--dim); cursor: default; }
       wave: campaignWave(3, w => w <= 2 ? [B] : w === 3 ? [R,G] : [R,G,B]) },
   ];
   // Endless: a long snaking path with two-row build strips between each pass.
-  // Two-colour enemies join at wave 11, white at wave 21; waves keep getting longer and faster.
+  // Two-colour enemies join at wave 11, white at wave 21, any-RGB colours at wave 31.
+  // Waves keep getting longer and faster.
   const ENDLESS = {
     id: 'E', n: 0, name: 'ENDLESS', chans: [0,1,2], waves: Infinity, endless: true,
     path: [[1,-1],[1,1],[7,1],[7,4],[1,4],[1,7],[7,7],[7,10],[1,10],[1,12],[7,12],[7,14]],
@@ -280,6 +287,14 @@ button:disabled { color: var(--dim); cursor: default; }
       const cols = [R, G, B];
       if (w > 10) cols.push(Y, C, M);
       if (w > 20) cols.push(WH);
+      if (w > 30) {               // any-RGB enemies: three new colours per wave, channels in 64 steps
+        const rnd = seeded(w * 9973);
+        for (let i = 0; i < 3; i++) {
+          let c;
+          do { c = [0, 1, 2].map(() => [0, 64, 128, 192, 255][Math.floor(rnd() * 5)]); } while (!c.some(v => v));
+          cols.push(c);
+        }
+      }
       return {
         count: 6 + Math.floor(w * 1.6),
         cols,
@@ -289,6 +304,28 @@ button:disabled { color: var(--dim); cursor: default; }
     },
   };
   const ALL = [...LEVELS, ENDLESS];
+
+  // ---- any-RGB helpers: everything below works from [r, g, b] triples, never from colour names ----
+  const NAMED = { '255,0,0': 'RED', '0,255,0': 'GREEN', '0,0,255': 'BLUE', '255,255,0': 'YELLOW',
+    '0,255,255': 'CYAN', '255,0,255': 'MAGENTA', '255,255,255': 'WHITE' };
+  const rgbCss = c => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+  const hex = c => '#' + c.map(v => Math.round(v).toString(16).padStart(2, '0')).join('').toUpperCase();
+  const colourName = c => NAMED[c.join(',')] || hex(c);
+  // A wave as a list of enemy colours, grouped: [{c, n}] most common first, plus per-channel totals.
+  function summarise(d) {
+    const groups = new Map(), tot = [0, 0, 0];
+    for (let i = 0; i < d.count; i++) {
+      const c = d.cols[i % d.cols.length], k = c.join(',');
+      groups.set(k, { c, n: (groups.get(k)?.n || 0) + 1 });
+      for (let j = 0; j < 3; j++) tot[j] += c[j];
+    }
+    return { groups: [...groups.values()].sort((a, b) => b.n - a.n), tot, count: d.count };
+  }
+  function seeded(seed) {   // small deterministic RNG so a given endless wave is always the same
+    let t = seed >>> 0;
+    return () => { t = (t + 0x6D2B79F5) >>> 0; let r = Math.imul(t ^ (t >>> 15), 1 | t);
+      r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+  }
   const byId = id => ALL.find(L => L.id === String(id)) || LEVELS[0];
 
   // Enemies per colour across a whole campaign level (a two-colour enemy counts for both).
@@ -323,10 +360,10 @@ button:disabled { color: var(--dim); cursor: default; }
   const upCost = (u, t) => Math.round(u.base * Math.pow(u.grow, t));
 
   // ================= progress (saved in this browser) =================
-  const KEY = 'rgbtd.v1';
+  const KEY = 'rgbtd.v2';   // bumped to wipe earlier test saves
   function freshProgress() {
     return {
-      xp: 0, xpEarned: 0, unlocked: 1, upv: 2, refunded: 0, auto: false,
+      xp: 0, xpEarned: 0, unlocked: 1, auto: false,
       best: {}, cleared: {},
       up: { shot: 0, reload: 0, beam: 0, range: 0, coin: 0, bounty: 0, lives: 0 },
       beams: [false, false, false],
@@ -343,15 +380,8 @@ button:disabled { color: var(--dim); cursor: default; }
       P.up = Object.assign(freshProgress().up, saved.up);       // older saves lack newer keys
       P.stats = Object.assign(freshProgress().stats, saved.stats);
       if (!Array.isArray(P.beams)) P.beams = [false, false, false];
-      // The first upgrade system had 3 big tiers; refund that XP so it can go into the new tiers.
-      if (saved.upv !== 2) {
-        const OLD = { shot: [30, 60, 100], beam: [30, 60, 100], range: [40, 80, 130], coin: [25, 50, 90] };
-        let refund = 0;
-        for (const k in OLD) for (let i = 0; i < ((saved.up && saved.up[k]) || 0); i++) refund += OLD[k][i];
-        P.up = freshProgress().up; P.upv = 2; P.xp += refund; P.refunded = refund;
-        try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {}
-      }
     }
+    localStorage.removeItem('rgbtd.v1');
   } catch (e) { /* storage blocked: play without saving */ }
   const hasBeam = ch => !!P.beams[ch];
   function save() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
@@ -423,11 +453,6 @@ button:disabled { color: var(--dim); cursor: default; }
 
   function renderUpgrades() {
     $('up-xp').textContent = P.xp + ' XP';
-    $('refund').hidden = !P.refunded;
-    if (P.refunded) {
-      $('refund').textContent = 'UPGRADES HAVE NEW TIERS. ' + P.refunded + ' XP REFUNDED.';
-      P.refunded = 0; save();
-    }
     const list = $('up-list'); list.innerHTML = '';
     const head = t => { const h = document.createElement('h2'); h.textContent = t; list.appendChild(h); };
 
@@ -530,6 +555,7 @@ button:disabled { color: var(--dim); cursor: default; }
     // only offer tower colours this level uses
     [0, 1, 2].forEach(i => { $('ch' + i).hidden = !L.chans.includes(i); });
     Object.keys(ui).forEach(k => delete ui[k]);
+    previewKey = '';
     show('game');
   }
 
@@ -543,8 +569,9 @@ button:disabled { color: var(--dim); cursor: default; }
     S.gap = d.gap; S.spawnT = 0; S.active = true; S.autoT = 0;
     if (S.L.endless && S.wave === 11) say('NEW: TWO-COLOUR ENEMIES', true);
     else if (S.L.endless && S.wave === 21) say('NEW: WHITE ENEMIES', true);
+    else if (S.L.endless && S.wave === 31) say('NEW: ANY-COLOUR ENEMIES', true);
     else if (!S.L.endless && d.cols.length === 1 && S.wave <= 2 && S.L.n > 1)
-      say('NEW: ' + CH[d.cols[0].indexOf(255)].name + ' ENEMIES', true);
+      say('NEW: ' + colourName(d.cols[0]) + ' ENEMIES', true);
     else say('WAVE ' + S.wave + ' INCOMING');
   }
 
@@ -760,6 +787,38 @@ button:disabled { color: var(--dim); cursor: default; }
     S.autoT = P.auto && !S.active ? 3 : 0;
   });
   $('tomenu').addEventListener('click', () => show('menu'));
+  // Reset asks for a second tap within 3 seconds
+  let wipeArm = 0;
+  $('wipe').addEventListener('click', () => {
+    if (Date.now() < wipeArm) {
+      P = freshProgress(); save(); wipeArm = 0;
+      $('wipe').textContent = 'PROGRESS RESET'; renderStats();
+      return;
+    }
+    wipeArm = Date.now() + 3000;
+    $('wipe').textContent = 'TAP AGAIN TO RESET';
+    setTimeout(() => { if (Date.now() >= wipeArm) $('wipe').textContent = 'RESET ALL PROGRESS'; }, 3100);
+  });
+
+  // Next-wave preview: up to four enemy colours with counts (most common first),
+  // then a bar splitting the wave's total red / green / blue points.
+  let previewKey = '';
+  function renderPreview() {
+    const el = $('preview');
+    const nextW = S.wave + 1;   // while a wave is live this is the one after it
+    const last = !S.L.endless && nextW > S.L.waves;
+    const key = S.L.id + '|' + nextW + '|' + S.ended;
+    if (key === previewKey) return;
+    previewKey = key;
+    if (S.ended || last) { el.innerHTML = '<span>' + (S.ended ? '' : 'FINAL WAVE') + '</span>'; return; }
+    const sm = summarise(S.L.wave(nextW));
+    const shown = sm.groups.slice(0, 4), more = sm.groups.length - shown.length;
+    const sum = sm.tot[0] + sm.tot[1] + sm.tot[2] || 1;
+    el.innerHTML = `
+      <span>NEXT</span>
+      <span class="groups">${shown.map(g => `<span class="cnt" title="${colourName(g.c)}"><span class="sw" style="background:${rgbCss(g.c)}"></span>${g.n}</span>`).join('')}${more > 0 ? `<span>+${more}</span>` : ''}</span>
+      <span class="mixbar" title="Red, green and blue share of this wave">${[0, 1, 2].map(k => sm.tot[k] ? `<span class="${CH[k].cls}" style="flex:${sm.tot[k] / sum}"></span>` : '').join('')}</span>`;
+  }
 
   // ================= render =================
   function drawMapTo(c2, tiles) {
@@ -858,7 +917,7 @@ button:disabled { color: var(--dim); cursor: default; }
     for (const e of S.enemies) {
       const x = Math.round(e.x) - 5, y = Math.round(e.y) - 5;
       ctx.fillStyle = '#fff'; ctx.fillRect(x - 1, y - 1, 12, 12);
-      ctx.fillStyle = `rgb(${Math.round(e.c[0])},${Math.round(e.c[1])},${Math.round(e.c[2])})`;
+      ctx.fillStyle = rgbCss(e.c);
       ctx.fillRect(x, y, 10, 10);
     }
 
@@ -914,6 +973,7 @@ button:disabled { color: var(--dim); cursor: default; }
     set('lives', 'text', String(S.lives));
     set('coins', 'text', String(S.coins));
     set('wave', 'text', S.L.endless ? String(S.wave) : S.wave + '/' + S.L.waves);
+    renderPreview();
     [0, 1, 2].forEach(i => set('ch' + i, 'aria-pressed', String(S.ch === i)));
     set('tshot', 'aria-pressed', String(S.type === 'shot'));
     set('tbeam', 'aria-pressed', String(S.type === 'beam'));
