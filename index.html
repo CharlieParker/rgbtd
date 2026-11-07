@@ -118,6 +118,14 @@ button:disabled { color: var(--dim); cursor: default; }
 .pips { display: flex; gap: 3px; }
 .pip { width: 8px; height: 8px; background: var(--edge); }
 .pip.on { background: var(--warn); }
+.counts { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; color: var(--ink); font-variant-numeric: tabular-nums; }
+.counts .cnt { display: inline-flex; align-items: center; gap: 6px; }
+.mixbar { display: flex; height: 6px; outline: 1px solid var(--edge); }
+.mixbar span.r { background: var(--r); } .mixbar span.g { background: var(--g); } .mixbar span.b { background: var(--b); }
+.prog { height: 6px; background: var(--edge); }
+.prog span { display: block; height: 100%; background: var(--warn); }
+.note { color: var(--warn); }
+#auto[aria-pressed="true"] { color: var(--warn); }
 
 /* stats */
 .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-variant-numeric: tabular-nums; }
@@ -157,6 +165,7 @@ button:disabled { color: var(--dim); cursor: default; }
   <section class="screen" id="scr-upgrades" hidden>
     <div class="top"><button data-go="menu">BACK</button><h2>UPGRADES</h2><span class="xp" id="up-xp">0 XP</span></div>
     <p>XP COMES FROM EVERY ATTEMPT, WIN OR LOSE.</p>
+    <p class="note" id="refund" hidden></p>
     <div class="stack scroll" id="up-list"></div>
   </section>
 
@@ -212,6 +221,7 @@ button:disabled { color: var(--dim); cursor: default; }
       </div>
       <div class="row">
         <button id="go">SEND WAVE 1</button>
+        <button id="auto" aria-pressed="false">AUTO</button>
         <button id="spd">1X</button>
       </div>
     </div>
@@ -239,26 +249,59 @@ button:disabled { color: var(--dim); cursor: default; }
   ];
   const R = [255,0,0], G = [0,255,0], B = [0,0,255];
 
-  // Level N has N enemy colours. A new colour appears alone first, then mixes in.
-  const LEVELS = [
-    { n: 1, name: 'RED ALERT', chans: [0], waves: 8,
-      path: [[1,-1],[1,3],[7,3],[7,6],[1,6],[1,9],[7,9],[7,12],[4,12],[4,14]],
-      mix: w => [R] },
-    { n: 2, name: 'GREEN SHIFT', chans: [0,1], waves: 10,
-      path: [[7,-1],[7,2],[2,2],[2,5],[6,5],[6,8],[2,8],[2,11],[6,11],[6,14]],
-      mix: w => w <= 2 ? [G] : w === 3 ? [R] : [R,G] },
-    { n: 3, name: 'FULL SPECTRUM', chans: [0,1,2], waves: 12,
-      path: [[4,-1],[4,2],[1,2],[1,7],[7,7],[7,11],[4,11],[4,14]],
-      mix: w => w <= 2 ? [B] : w === 3 ? [R,G] : [R,G,B] },
-  ];
-  function waveDef(lv, w) {
-    const L = LEVELS[lv - 1];
-    return {
-      count: 5 + w * 2 + (lv - 1) * 2,
-      cols: L.mix(w),
-      spd: 0.9 + w * 0.05 + (lv - 1) * 0.05,
+  const Y = [255,255,0], C = [0,255,255], M = [255,0,255], WH = [255,255,255];
+
+  // Campaign: level N has N enemy colours. A new colour appears alone first, then mixes in.
+  function campaignWave(n, mix) {
+    return w => ({
+      count: 5 + w * 2 + (n - 1) * 2,
+      cols: mix(w),
+      spd: 0.9 + w * 0.05 + (n - 1) * 0.05,
       gap: Math.max(0.42, 0.9 - w * 0.045),
-    };
+    });
+  }
+  const LEVELS = [
+    { id: '1', n: 1, name: 'RED ALERT', chans: [0], waves: 8,
+      path: [[1,-1],[1,3],[7,3],[7,6],[1,6],[1,9],[7,9],[7,12],[4,12],[4,14]],
+      wave: campaignWave(1, w => [R]) },
+    { id: '2', n: 2, name: 'GREEN SHIFT', chans: [0,1], waves: 10,
+      path: [[7,-1],[7,2],[2,2],[2,5],[6,5],[6,8],[2,8],[2,11],[6,11],[6,14]],
+      wave: campaignWave(2, w => w <= 2 ? [G] : w === 3 ? [R] : [R,G]) },
+    { id: '3', n: 3, name: 'FULL SPECTRUM', chans: [0,1,2], waves: 12,
+      path: [[4,-1],[4,2],[1,2],[1,7],[7,7],[7,11],[4,11],[4,14]],
+      wave: campaignWave(3, w => w <= 2 ? [B] : w === 3 ? [R,G] : [R,G,B]) },
+  ];
+  // Endless: a long snaking path with two-row build strips between each pass.
+  // Two-colour enemies join at wave 11, white at wave 21; waves keep getting longer and faster.
+  const ENDLESS = {
+    id: 'E', n: 0, name: 'ENDLESS', chans: [0,1,2], waves: Infinity, endless: true,
+    path: [[1,-1],[1,1],[7,1],[7,4],[1,4],[1,7],[7,7],[7,10],[1,10],[1,12],[7,12],[7,14]],
+    wave: w => {
+      const cols = [R, G, B];
+      if (w > 10) cols.push(Y, C, M);
+      if (w > 20) cols.push(WH);
+      return {
+        count: 6 + Math.floor(w * 1.6),
+        cols,
+        spd: Math.min(2.2, 0.95 + w * 0.035),
+        gap: Math.max(0.3, 0.85 - w * 0.02),
+      };
+    },
+  };
+  const ALL = [...LEVELS, ENDLESS];
+  const byId = id => ALL.find(L => L.id === String(id)) || LEVELS[0];
+
+  // Enemies per colour across a whole campaign level (a two-colour enemy counts for both).
+  function colourCounts(L) {
+    const t = [0, 0, 0];
+    for (let w = 1; w <= L.waves; w++) {
+      const d = L.wave(w);
+      for (let i = 0; i < d.count; i++) {
+        const c = d.cols[i % d.cols.length];
+        for (let k = 0; k < 3; k++) if (c[k]) t[k]++;
+      }
+    }
+    return t;
   }
 
   // One-off unlocks: a beam tower per colour. A colour's beam is buyable once its level is open.
@@ -267,20 +310,25 @@ button:disabled { color: var(--dim); cursor: default; }
     { ch: 1, name: 'GREEN BEAM', cost: 60 },
     { ch: 2, name: 'BLUE BEAM',  cost: 80 },
   ];
+  // Many small tiers on a rising cost curve: early tiers are cheap, later ones need repeat play.
   const UPGRADES = [
-    { id: 'shot',  name: 'SHOT POWER', desc: '+5 DAMAGE PER HIT', cost: [30, 60, 100] },
-    { id: 'beam',  name: 'BEAM POWER', desc: '+8 DRAIN PER SECOND', cost: [30, 60, 100], needsBeam: true },
-    { id: 'range', name: 'LONG SIGHT', desc: '+10% TOWER RANGE', cost: [40, 80, 130] },
-    { id: 'coin',  name: 'WAR CHEST',  desc: '+25 STARTING COIN', cost: [25, 50, 90] },
+    { id: 'shot',   name: 'SHOT POWER',  desc: 'MORE DAMAGE PER BULLET',       max: 20, base: 15, grow: 1.17, fmt: t => '+' + 2 * t + ' DMG' },
+    { id: 'reload', name: 'QUICK LOAD',  desc: 'SHOOTERS RELOAD FASTER',       max: 20, base: 18, grow: 1.17, fmt: t => '-' + 2 * t + '% RELOAD' },
+    { id: 'beam',   name: 'BEAM POWER',  desc: 'BEAMS DRAIN FASTER',           max: 20, base: 18, grow: 1.17, fmt: t => '+' + 3 * t + ' PER SEC', needsBeam: true },
+    { id: 'range',  name: 'LONG SIGHT',  desc: 'ALL TOWERS REACH FURTHER',     max: 20, base: 22, grow: 1.17, fmt: t => '+' + 2 * t + '% RANGE' },
+    { id: 'coin',   name: 'WAR CHEST',   desc: 'MORE STARTING COIN',           max: 20, base: 12, grow: 1.17, fmt: t => '+' + 10 * t + ' COIN' },
+    { id: 'bounty', name: 'BOUNTY',      desc: 'MORE COIN PER COLOUR DRAINED', max: 20, base: 22, grow: 1.17, fmt: t => '+' + 3 * t + '% COIN' },
+    { id: 'lives',  name: 'THICK WALLS', desc: 'EXTRA LIVES EACH RUN',         max: 10, base: 40, grow: 1.30, fmt: t => '+' + t + ' LIVES' },
   ];
+  const upCost = (u, t) => Math.round(u.base * Math.pow(u.grow, t));
 
   // ================= progress (saved in this browser) =================
   const KEY = 'rgbtd.v1';
   function freshProgress() {
     return {
-      xp: 0, xpEarned: 0, unlocked: 1,
-      best: { 1: 0, 2: 0, 3: 0 }, cleared: {},
-      up: { shot: 0, beam: 0, range: 0, coin: 0 },
+      xp: 0, xpEarned: 0, unlocked: 1, upv: 2, refunded: 0, auto: false,
+      best: {}, cleared: {},
+      up: { shot: 0, reload: 0, beam: 0, range: 0, coin: 0, bounty: 0, lives: 0 },
       beams: [false, false, false],
       stats: { runs: 0, wins: 0, kills: 0, leaks: 0, drained: [0, 0, 0] },
       heat: null,
@@ -295,16 +343,24 @@ button:disabled { color: var(--dim); cursor: default; }
       P.up = Object.assign(freshProgress().up, saved.up);       // older saves lack newer keys
       P.stats = Object.assign(freshProgress().stats, saved.stats);
       if (!Array.isArray(P.beams)) P.beams = [false, false, false];
+      // The first upgrade system had 3 big tiers; refund that XP so it can go into the new tiers.
+      if (saved.upv !== 2) {
+        const OLD = { shot: [30, 60, 100], beam: [30, 60, 100], range: [40, 80, 130], coin: [25, 50, 90] };
+        let refund = 0;
+        for (const k in OLD) for (let i = 0; i < ((saved.up && saved.up[k]) || 0); i++) refund += OLD[k][i];
+        P.up = freshProgress().up; P.upv = 2; P.xp += refund; P.refunded = refund;
+        try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {}
+      }
     }
   } catch (e) { /* storage blocked: play without saving */ }
   const hasBeam = ch => !!P.beams[ch];
   function save() { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch (e) {} }
 
   function towerStats() {
-    const rm = 1 + 0.1 * P.up.range;
+    const u = P.up, rm = 1 + 0.02 * u.range;
     return {
-      shot: { name: 'SHOT', cost: 40, range: 2.5 * T * rm, rate: 0.9, dmg: 40 + 5 * P.up.shot },
-      beam: { name: 'BEAM', cost: 60, range: 2.0 * T * rm, dps: 45 + 8 * P.up.beam },
+      shot: { name: 'SHOT', cost: 40, range: 2.5 * T * rm, rate: 0.9 * (1 - 0.02 * u.reload), dmg: 40 + 2 * u.shot },
+      beam: { name: 'BEAM', cost: 60, range: 2.0 * T * rm, dps: 45 + 3 * u.beam },
     };
   }
 
@@ -326,29 +382,52 @@ button:disabled { color: var(--dim); cursor: default; }
     return chans.map(c => `<span class="sw ${CH[c].cls}"></span>`).join('');
   }
 
+  function levelCard(L, locked, status) {
+    const b = document.createElement('button');
+    b.className = 'card';
+    b.disabled = locked;
+    let mix;
+    if (L.endless) {
+      mix = `<span class="sub">RED, GREEN, BLUE. TWO-COLOUR FROM WAVE 11, WHITE FROM 21.</span>`;
+    } else {
+      const t = colourCounts(L);
+      mix = `
+        <span class="counts">${L.chans.map(c => `<span class="cnt"><span class="sw ${CH[c].cls}"></span>${t[c]}</span>`).join('')}<span class="sub">ENEMIES</span></span>
+        <span class="mixbar">${L.chans.map(c => `<span class="${CH[c].cls}" style="flex:${t[c]}"></span>`).join('')}</span>`;
+    }
+    b.innerHTML = `
+      <span class="line"><span>${L.endless ? 'ENDLESS' : 'LEVEL ' + L.n}</span><span class="chips">${chips(L.chans)}</span></span>
+      <span>${L.endless ? 'THE LONG ROAD' : L.name}</span>
+      <span class="sub">${L.endless ? 'NO LAST WAVE · BIG BUILD SPACE' : L.chans.length + ' COLOUR' + (L.chans.length > 1 ? 'S' : '') + ' · ' + L.waves + ' WAVES'}</span>
+      ${mix}
+      <span class="sub">${status}</span>`;
+    b.addEventListener('click', () => startLevel(L));
+    return b;
+  }
+
   function renderLevels() {
     const list = $('level-list'); list.innerHTML = '';
     LEVELS.forEach(L => {
       const locked = L.n > P.unlocked;
-      const best = P.best[L.n] || 0;
-      const b = document.createElement('button');
-      b.className = 'card';
-      b.disabled = locked;
+      const best = P.best[L.id] || 0;
       const status = locked ? 'LOCKED · CLEAR LEVEL ' + (L.n - 1)
-        : P.cleared[L.n] ? 'CLEARED · BEST ' + best + '/' + L.waves
+        : P.cleared[L.id] ? 'CLEARED · BEST ' + best + '/' + L.waves
         : best ? 'BEST ' + best + '/' + L.waves : 'NOT PLAYED';
-      b.innerHTML = `
-        <span class="line"><span>LEVEL ${L.n}</span><span class="chips">${chips(L.chans)}</span></span>
-        <span>${L.name}</span>
-        <span class="sub">${L.chans.length} COLOUR${L.chans.length > 1 ? 'S' : ''} · ${L.waves} WAVES</span>
-        <span class="sub">${status}</span>`;
-      b.addEventListener('click', () => startLevel(L.n));
-      list.appendChild(b);
+      list.appendChild(levelCard(L, locked, status));
     });
+    const eLocked = !P.cleared['1'];
+    const eBest = P.best['E'] || 0;
+    list.appendChild(levelCard(ENDLESS, eLocked,
+      eLocked ? 'LOCKED · CLEAR LEVEL 1' : eBest ? 'BEST WAVE ' + eBest : 'NOT PLAYED'));
   }
 
   function renderUpgrades() {
     $('up-xp').textContent = P.xp + ' XP';
+    $('refund').hidden = !P.refunded;
+    if (P.refunded) {
+      $('refund').textContent = 'UPGRADES HAVE NEW TIERS. ' + P.refunded + ' XP REFUNDED.';
+      P.refunded = 0; save();
+    }
     const list = $('up-list'); list.innerHTML = '';
     const head = t => { const h = document.createElement('h2'); h.textContent = t; list.appendChild(h); };
 
@@ -371,18 +450,20 @@ button:disabled { color: var(--dim); cursor: default; }
 
     head('UPGRADES');
     UPGRADES.forEach(u => {
-      const lvl = P.up[u.id], maxed = lvl >= u.cost.length, price = u.cost[lvl];
+      const t = P.up[u.id], maxed = t >= u.max, price = upCost(u, t);
       const blocked = u.needsBeam && !P.beams.some(Boolean);
       const b = document.createElement('button');
       b.className = 'card';
       b.disabled = maxed || blocked || P.xp < price;
-      const pips = u.cost.map((_, i) => `<span class="pip${i < lvl ? ' on' : ''}"></span>`).join('');
+      const now = t ? u.fmt(t) : 'NONE';
       b.innerHTML = `
-        <span class="line"><span>${u.name}</span><span class="pips">${pips}</span></span>
+        <span class="line"><span>${u.name}</span><span>${t}/${u.max}</span></span>
         <span class="sub">${u.desc}</span>
-        <span class="sub">${maxed ? 'MAXED' : blocked ? 'UNLOCK A BEAM FIRST' : 'BUY · ' + price + ' XP'}</span>`;
+        <span class="prog"><span style="width:${(t / u.max) * 100}%"></span></span>
+        <span class="sub">NOW ${now}${maxed ? '' : ' · NEXT ' + u.fmt(t + 1)}</span>
+        <span class="${maxed || blocked || P.xp < price ? 'sub' : 'xp'}">${maxed ? 'MAXED' : blocked ? 'UNLOCK A BEAM FIRST' : 'BUY · ' + price + ' XP'}</span>`;
       b.addEventListener('click', () => {
-        if (maxed || P.xp < price) return;
+        if (maxed || blocked || P.xp < price) return;
         P.xp -= price; P.up[u.id]++; save(); renderUpgrades();
       });
       list.appendChild(b);
@@ -399,7 +480,8 @@ button:disabled { color: var(--dim); cursor: default; }
       ['RUNS', s.runs], ['MAPS CLEARED', s.wins], ['ENEMIES DRAINED', s.kills], ['LEAKS', s.leaks],
       ['RED DRAINED', Math.round(s.drained[0])], ['GREEN DRAINED', Math.round(s.drained[1])],
       ['BLUE DRAINED', Math.round(s.drained[2])], ['XP EARNED', P.xpEarned],
-      ...LEVELS.map(L => ['LV ' + L.n + ' BEST WAVE', (P.best[L.n] || 0) + '/' + L.waves]),
+      ...LEVELS.map(L => ['LV ' + L.n + ' BEST WAVE', (P.best[L.id] || 0) + '/' + L.waves]),
+      ['ENDLESS BEST WAVE', P.best['E'] || 0],
     ];
     $('stat-grid').innerHTML = rows.map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
     drawHeat();
@@ -433,12 +515,12 @@ button:disabled { color: var(--dim); cursor: default; }
 
   // ================= run state =================
   let S = null;
-  function startLevel(n) {
-    const L = LEVELS[n - 1];
+  function startLevel(L) {
     S = {
-      lv: n, L, path: buildPath(L.path), types: towerStats(),
-      lives: 10, coins: 120 + 25 * P.up.coin, coinFrac: 0,
-      wave: 0, active: false, queue: [], gap: 0.8, spawnT: 0,
+      L, path: buildPath(L.path), types: towerStats(),
+      lives: 10 + P.up.lives, coins: 120 + 10 * P.up.coin, coinFrac: 0,
+      coinPer: COIN_PER_POINTS / (1 + 0.03 * P.up.bounty),
+      wave: 0, active: false, queue: [], gap: 0.8, spawnT: 0, autoT: 0,   // the first wave is always sent by hand
       enemies: [], towers: [], bullets: [], fx: [],
       sel: null, ghost: null, ch: L.chans[0], type: 'shot', speed: 1,
       over: false, won: false, ended: false, xpGain: 0,
@@ -447,8 +529,6 @@ button:disabled { color: var(--dim); cursor: default; }
     };
     // only offer tower colours this level uses
     [0, 1, 2].forEach(i => { $('ch' + i).hidden = !L.chans.includes(i); });
-    $('tshot').textContent = 'SHOT ' + S.types.shot.cost;
-    $('tbeam').textContent = 'BEAM ' + S.types.beam.cost;
     Object.keys(ui).forEach(k => delete ui[k]);
     show('game');
   }
@@ -458,11 +538,14 @@ button:disabled { color: var(--dim); cursor: default; }
   function sendWave() {
     if (!S || S.ended || S.active) return;
     S.wave++;
-    const d = waveDef(S.lv, S.wave);
+    const d = S.L.wave(S.wave);
     S.queue = Array.from({ length: d.count }, (_, i) => ({ c: [...d.cols[i % d.cols.length]], spd: d.spd }));
-    S.gap = d.gap; S.spawnT = 0; S.active = true;
-    const fresh = d.cols.length === 1 && S.wave <= 2 && S.lv > 1;
-    say(fresh ? 'NEW: ' + CH[d.cols[0].indexOf(255)].name + ' ENEMIES' : 'WAVE ' + S.wave + ' INCOMING', fresh);
+    S.gap = d.gap; S.spawnT = 0; S.active = true; S.autoT = 0;
+    if (S.L.endless && S.wave === 11) say('NEW: TWO-COLOUR ENEMIES', true);
+    else if (S.L.endless && S.wave === 21) say('NEW: WHITE ENEMIES', true);
+    else if (!S.L.endless && d.cols.length === 1 && S.wave <= 2 && S.L.n > 1)
+      say('NEW: ' + CH[d.cols[0].indexOf(255)].name + ' ENEMIES', true);
+    else say('WAVE ' + S.wave + ' INCOMING');
   }
 
   function drain(e, ch, amt) {
@@ -470,7 +553,7 @@ button:disabled { color: var(--dim); cursor: default; }
     e.c[ch] = Math.max(0, before - amt);
     const got = before - e.c[ch];
     S.drained[ch] += got;
-    S.coinFrac += got / COIN_PER_POINTS;
+    S.coinFrac += got / S.coinPer;
     const whole = Math.floor(S.coinFrac);
     if (whole) { S.coins += whole; S.coinFrac -= whole; }
     if (e.c[0] + e.c[1] + e.c[2] < 0.5) kill(e);
@@ -495,19 +578,21 @@ button:disabled { color: var(--dim); cursor: default; }
     return best;
   }
 
+  // XP: 5 per wave cleared (endless adds a growing bonus per wave), 1 per kill, 50 x level for a clear.
   function endRun(won) {
     if (S.ended) return;
     S.ended = true; S.won = won; S.over = !won;
     const cleared = won ? S.wave : S.wave - (S.active ? 1 : 0);
-    const xp = cleared * 5 + S.kills + (won ? 50 * S.lv : 0);
+    let xp = cleared * 5 + S.kills + (won ? 50 * S.L.n : 0);
+    if (S.L.endless) xp += Math.floor(cleared * cleared / 4);
     S.xpGain = xp;
     P.xp += xp; P.xpEarned += xp;
     P.stats.runs++; P.stats.kills += S.kills; P.stats.leaks += S.leaks;
     for (let i = 0; i < 3; i++) P.stats.drained[i] += S.drained[i];
-    P.best[S.lv] = Math.max(P.best[S.lv] || 0, cleared);
+    P.best[S.L.id] = Math.max(P.best[S.L.id] || 0, cleared);
     if (won) {
-      P.stats.wins++; P.cleared[S.lv] = true;
-      P.unlocked = Math.max(P.unlocked, Math.min(LEVELS.length, S.lv + 1));
+      P.stats.wins++; P.cleared[S.L.id] = true;
+      P.unlocked = Math.max(P.unlocked, Math.min(LEVELS.length, S.L.n + 1));
     }
     const counts = new Array(COLS * ROWS).fill(0);
     for (const [x, y] of S.deaths) {
@@ -515,7 +600,7 @@ button:disabled { color: var(--dim); cursor: default; }
       const r = Math.min(ROWS - 1, Math.max(0, Math.floor(y / T)));
       counts[r * COLS + c]++;
     }
-    P.heat = { lv: S.lv, counts };
+    P.heat = { lv: S.L.id, counts };
     save();
     say(won ? 'LEVEL CLEARED! +' + xp + ' XP' : 'OUT OF LIVES. +' + xp + ' XP', !won);
   }
@@ -600,6 +685,12 @@ button:disabled { color: var(--dim); cursor: default; }
       const bonus = 20 + S.wave * 2;
       S.coins += bonus;
       say('WAVE ' + S.wave + ' CLEAR +' + bonus);
+      if (P.auto) S.autoT = 3;
+    }
+
+    if (!S.active && P.auto && S.autoT > 0) {
+      S.autoT -= dt;
+      if (S.autoT <= 0) sendWave();
     }
   }
 
@@ -661,8 +752,13 @@ button:disabled { color: var(--dim); cursor: default; }
     if (S.quitArm > 0) { endRun(false); show('menu'); return; }
     S.quitArm = 2; say('TAP MENU AGAIN TO QUIT', true);
   });
-  $('retry').addEventListener('click', () => startLevel(S.lv));
-  $('next').addEventListener('click', () => startLevel(Math.min(LEVELS.length, S.lv + 1)));
+  $('retry').addEventListener('click', () => startLevel(S.L));
+  $('next').addEventListener('click', () => startLevel(LEVELS[Math.min(LEVELS.length, S.L.n + 1) - 1]));
+  // AUTO sends the next wave 3 seconds after a clear; the setting is remembered between runs
+  $('auto').addEventListener('click', () => {
+    P.auto = !P.auto; save();
+    S.autoT = P.auto && !S.active ? 3 : 0;
+  });
   $('tomenu').addEventListener('click', () => show('menu'));
 
   // ================= render =================
@@ -777,7 +873,7 @@ button:disabled { color: var(--dim); cursor: default; }
       ctx.fillText(S.won ? 'LEVEL CLEARED' : 'GAME OVER', W / 2, H / 2 - 14);
       ctx.font = '8px "Press Start 2P", monospace';
       ctx.fillStyle = '#8b90b0';
-      ctx.fillText(S.won ? 'ALL ' + S.L.waves + ' WAVES HELD' : 'REACHED WAVE ' + S.wave, W / 2, H / 2 + 4);
+      ctx.fillText(S.won ? 'ALL ' + S.L.waves + ' WAVES HELD' : 'REACHED WAVE ' + S.wave + (S.L.endless ? ' · BEST ' + (P.best['E'] || 0) : ''), W / 2, H / 2 + 4);
       ctx.fillStyle = '#ffd54a';
       ctx.fillText('+' + S.xpGain + ' XP', W / 2, H / 2 + 20);
     }
@@ -786,7 +882,7 @@ button:disabled { color: var(--dim); cursor: default; }
   function drawHeat() {
     const hc = $('heat'), h2 = hc.getContext('2d');
     const heat = P.heat;
-    const L = LEVELS[(heat ? heat.lv : 1) - 1];
+    const L = byId(heat ? heat.lv : '1');
     drawMapTo(h2, buildPath(L.path).tiles);
     const avail = Math.min(hc.parentElement.getBoundingClientRect().width || W, 360);
     const s = avail >= W * 2 ? 2 : avail / W;
@@ -799,7 +895,7 @@ button:disabled { color: var(--dim); cursor: default; }
       h2.fillStyle = `rgba(255,213,74,${0.25 + 0.75 * n / max})`;
       h2.fillRect(c * T + 1, r * T + 1, T - 1, T - 1);
     });
-    $('heat-note').textContent = 'LEVEL ' + heat.lv + ' · BRIGHTER = MORE KILLS';
+    $('heat-note').textContent = (L.endless ? 'ENDLESS' : 'LEVEL ' + L.n) + ' · BRIGHTER = MORE KILLS';
   }
 
   // ================= UI sync =================
@@ -814,10 +910,10 @@ button:disabled { color: var(--dim); cursor: default; }
   }
   function syncUI() {
     if (!S || current !== 'game') return;
-    set('lvl', 'text', String(S.lv));
+    set('lvl', 'text', S.L.endless ? '∞' : String(S.L.n));
     set('lives', 'text', String(S.lives));
     set('coins', 'text', String(S.coins));
-    set('wave', 'text', S.wave + '/' + S.L.waves);
+    set('wave', 'text', S.L.endless ? String(S.wave) : S.wave + '/' + S.L.waves);
     [0, 1, 2].forEach(i => set('ch' + i, 'aria-pressed', String(S.ch === i)));
     set('tshot', 'aria-pressed', String(S.type === 'shot'));
     set('tbeam', 'aria-pressed', String(S.type === 'beam'));
@@ -828,8 +924,10 @@ button:disabled { color: var(--dim); cursor: default; }
     set('quit', 'text', S.quitArm > 0 ? 'QUIT?' : 'MENU');
     set('build', 'hidden', S.ended);
     set('end', 'hidden', !S.ended);
-    set('next', 'hidden', !(S.won && S.lv < LEVELS.length));
+    set('next', 'hidden', !(S.won && S.L.n < LEVELS.length));
+    set('auto', 'aria-pressed', String(!!P.auto));
     if (S.active) { set('go', 'text', 'WAVE ' + S.wave + ' LIVE'); set('go', 'disabled', true); }
+    else if (P.auto && S.autoT > 0) { set('go', 'text', 'WAVE ' + (S.wave + 1) + ' IN ' + Math.ceil(S.autoT)); set('go', 'disabled', false); }
     else { set('go', 'text', 'SEND WAVE ' + (S.wave + 1)); set('go', 'disabled', false); }
     if (S.sel && !S.ended) {
       set('msg', 'text', CH[S.sel.ch].name + ' ' + S.types[S.sel.type].name);
