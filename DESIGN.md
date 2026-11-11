@@ -28,6 +28,7 @@ The game must support any enemy colour RGB can express, not just the seven pure 
 - The map is the phone screen in portrait. The path is plain black.
 - Enemies have a thin white outline so they stay visible as they darken towards black.
 - Internal resolution 180×280, scaled up in whole-number steps for crisp pixels.
+- The controls under the map (build, tower and end panels) share one fixed-height slot, and the message and preview rows have fixed heights, so the map never moves or rescales mid-run.
 
 ## Towers
 
@@ -48,6 +49,7 @@ The game must support any enemy colour RGB can express, not just the seven pure 
 - Every run starts with 100 health (plus Thick Walls upgrades).
 - A leaking enemy costs health in proportion to the colour it still carries: 10 per 255 colour points. A full single colour costs 10, a full two-colour enemy 20, full white 30, and a nearly drained enemy almost nothing.
 - So partial damage always counts, and mixed enemies are more dangerous to let through.
+- When an enemy leaks, a number per colour it still carried floats up beside the exit, in that colour (e.g. -1 in red and -3 in blue for a dim purple), so a faded enemy's cost is readable.
 - The HUD shows health rounded up. Old saves carry over: each Thick Walls tier is now worth +10 health.
 
 ## Economy
