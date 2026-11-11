@@ -43,16 +43,23 @@ The game must support any enemy colour RGB can express, not just the seven pure 
 - In-run upgrades: tap a built tower to open its panel and spend coin on it. Shooters have damage (+25%), range (+10%) and reload (−10%); beams have power (+25%) and range (+10%). Each stat has 5 levels; level n costs 0.6 × tower cost × n. Yellow pixels on the tower's base show its total upgrade level.
 - Selling refunds 70% of the tower's cost plus everything spent upgrading it.
 
+## Health and leaks
+
+- Every run starts with 100 health (plus Thick Walls upgrades).
+- A leaking enemy costs health in proportion to the colour it still carries: 10 per 255 colour points. A full single colour costs 10, a full two-colour enemy 20, full white 30, and a nearly drained enemy almost nothing.
+- So partial damage always counts, and mixed enemies are more dangerous to let through.
+- The HUD shows health rounded up. Old saves carry over: each Thick Walls tier is now worth +10 health.
+
 ## Economy
 
 - 1 coin per 20 colour points drained, so overkill earns nothing.
 - Wave clear bonus: 20 + 2 × wave number.
-- Next-wave preview: a strip under the top bar shows up to four enemy colours with counts (most common first, "+N" for the rest) and a bar splitting the wave's total red, green and blue. While a wave is live it previews the one after.
+- Next-wave preview: a strip under the top bar shows up to four enemy colours with counts (most common first, "+N" for the rest) and three small bars showing the wave's share of red, green and blue. While a wave is live it previews the one after.
 - AUTO toggle: sends the next wave 3 seconds after a clear (the first wave is always sent by hand). The setting is remembered between runs.
 
 ## Levels
 
-Level N has N enemy colours. Each level has its own map and 10 lives.
+Level N has N enemy colours. Each level has its own map and 100 health.
 
 | Level | Name | Colours | Waves | How the new colour arrives |
 |-------|------|---------|-------|----------------------------|
@@ -64,7 +71,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 - Each enemy is still a single primary colour. Mixed-colour enemies (yellow, magenta, cyan, white) arrive once C/M/Y towers unlock.
 - Waves get longer, faster and more tightly spaced as they go.
 - The tower colour buttons only show the colours a level uses.
-- Level cards show how many enemies of each colour the level sends, with a proportional bar.
+- Level cards show three bars, one each for red, green and blue: that colour's share of all the colour points the level sends (a white enemy counts towards all three), plus the total enemy count. Endless measures its first 30 waves.
 
 ## Endless
 
@@ -97,7 +104,7 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 | Long sight | +2% range | 20 | 22 | 1.17 |
 | War chest | +10 starting coin | 20 | 12 | 1.17 |
 | Bounty | +3% coin per colour drained | 20 | 22 | 1.17 |
-| Thick walls | +1 life | 10 | 40 | 1.30 |
+| Thick walls | +10 health | 10 | 40 | 1.30 |
 
 - Stats screen has a two-tap "Reset all progress" button.
 - Stats: runs, clears, kills, leaks, points drained per colour, XP earned, best wave per level, best endless wave.
@@ -119,7 +126,6 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 - Splitting enemies: a white enemy that splits into red, green and blue when hit (Bloons TD 6's layers).
 - Absorbers: enemies healed by one colour.
 - Shifters: enemies that move health between channels.
-- Leak damage proportional to the leaking enemy's remaining colour.
 - Colour-blind mode: optional per-channel bars or patterns on enemies.
 - Wrap as a phone app (Capacitor) or installable web app.
 
@@ -129,7 +135,8 @@ Level N has N enemy colours. Each level has its own map and 10 lives.
 2. **Menu, levels and XP** (done): three levels, upgrades, stats, heat map, saved progress.
 3. **Endless, auto waves, deep upgrades, wave preview, any-RGB support** (done).
 4. **In-run tower upgrades** (done).
-5. **Next**: candidates are star ratings, tower merging (C/M/Y), endless perks, smarter enemies.
+5. **Three-bar colour displays and 100 health with scaled leak damage** (done).
+6. **Next**: candidates are star ratings, tower merging (C/M/Y), endless perks, smarter enemies.
 
 ## Tech
 

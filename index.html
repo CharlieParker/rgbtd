@@ -1,3 +1,4 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>RGBTD</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -124,6 +125,13 @@ button:disabled { color: var(--dim); cursor: default; }
 .counts .cnt { display: inline-flex; align-items: center; gap: 6px; }
 .mixbar { display: flex; height: 6px; outline: 1px solid var(--edge); }
 .mixbar span.r { background: var(--r); } .mixbar span.g { background: var(--g); } .mixbar span.b { background: var(--b); }
+.bars { display: flex; flex-direction: column; gap: 4px; }
+.bar { display: grid; grid-template-columns: 10px 1fr 4ch; align-items: center; gap: 8px; font-variant-numeric: tabular-nums; }
+.bar .track { height: 6px; background: var(--edge); }
+.bar .track span { display: block; height: 100%; }
+.bar .track .r { background: var(--r); } .bar .track .g { background: var(--g); } .bar .track .b { background: var(--b); }
+.bar .num { text-align: right; color: var(--ink); }
+.bar.off .num { color: var(--dim); }
 .prog { height: 6px; background: var(--edge); }
 .prog span { display: block; height: 100%; background: var(--warn); }
 .note { color: var(--warn); }
@@ -131,7 +139,10 @@ button:disabled { color: var(--dim); cursor: default; }
 .preview { display: flex; align-items: center; gap: 10px; min-height: 18px; color: var(--dim); font-variant-numeric: tabular-nums; }
 .preview .groups { display: flex; flex-wrap: wrap; gap: 4px 10px; flex: 1; min-width: 0; }
 .preview .cnt { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
-.preview .mixbar { width: 54px; flex: 0 0 auto; }
+.preview .minibars { width: 54px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 2px; }
+.preview .minibars .track { height: 3px; background: var(--edge); }
+.preview .minibars .track span { display: block; height: 100%; }
+.preview .minibars .r { background: var(--r); } .preview .minibars .g { background: var(--g); } .preview .minibars .b { background: var(--b); }
 
 /* stats */
 .grid2 { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; font-variant-numeric: tabular-nums; }
@@ -198,6 +209,7 @@ button:disabled { color: var(--dim); cursor: default; }
       <p>SHOOTERS FIRE BULLETS.<br><span>BIG HITS, LONGER RANGE, CAN WASTE DAMAGE.</span></p>
       <p>BEAMS DRAIN NONSTOP.<br><span>UNLOCK EACH COLOUR'S BEAM WITH XP. NO WASTE, SHORTER RANGE.</span></p>
       <p>DRAINING COLOUR EARNS COIN.<br><span>TAP A BUILT TOWER TO UPGRADE IT WITH COIN, OR SELL IT. YELLOW DOTS SHOW ITS LEVEL.</span></p>
+      <p>YOU HAVE 100 HEALTH.<br><span>A LEAK COSTS HEALTH BY THE COLOUR IT HAS LEFT. A FULL RED COSTS 10, FULL WHITE 30. DRAINING HALF A LEAK HALVES THE COST.</span></p>
       <p>EVERY ATTEMPT EARNS XP.<br><span>SPEND IT ON UPGRADES BETWEEN RUNS.</span></p>
     </div>
   </section>
@@ -207,7 +219,7 @@ button:disabled { color: var(--dim); cursor: default; }
     <div class="hud">
       <button id="quit">MENU</button>
       <span>LV <b id="lvl">1</b></span>
-      <span>♥ <b id="lives">10</b></span>
+      <span>♥ <b id="lives">100</b></span>
       <span>¢ <b id="coins">120</b></span>
       <span>W <b id="wave">0/8</b></span>
     </div>
@@ -260,6 +272,7 @@ button:disabled { color: var(--dim); cursor: default; }
   // ================= constants =================
   const T = 20, COLS = 9, ROWS = 14, W = COLS * T, H = ROWS * T;
   const COIN_PER_POINTS = 20;
+  const LEAK_PER_255 = 10;   // health lost per 255 colour points a leaking enemy still carries
   const CH = [
     { name: 'RED', css: 'rgb(255,0,0)', cls: 'r' },
     { name: 'GRN', css: 'rgb(0,255,0)', cls: 'g' },
@@ -357,6 +370,20 @@ button:disabled { color: var(--dim); cursor: default; }
     return t;
   }
 
+  // Total red, green and blue points (0-255 each per enemy) across the first `upTo` waves.
+  function channelTotals(L, upTo) {
+    const pts = [0, 0, 0]; let enemies = 0;
+    for (let w = 1; w <= upTo; w++) {
+      const d = L.wave(w);
+      enemies += d.count;
+      for (let i = 0; i < d.count; i++) {
+        const c = d.cols[i % d.cols.length];
+        for (let k = 0; k < 3; k++) pts[k] += c[k];
+      }
+    }
+    return { pts, enemies };
+  }
+
   // One-off unlocks: a beam tower per colour. A colour's beam is buyable once its level is open.
   const UNLOCKS = [
     { ch: 0, name: 'RED BEAM',   cost: 40 },
@@ -371,7 +398,7 @@ button:disabled { color: var(--dim); cursor: default; }
     { id: 'range',  name: 'LONG SIGHT',  desc: 'ALL TOWERS REACH FURTHER',     max: 20, base: 22, grow: 1.17, fmt: t => '+' + 2 * t + '% RANGE' },
     { id: 'coin',   name: 'WAR CHEST',   desc: 'MORE STARTING COIN',           max: 20, base: 12, grow: 1.17, fmt: t => '+' + 10 * t + ' COIN' },
     { id: 'bounty', name: 'BOUNTY',      desc: 'MORE COIN PER COLOUR DRAINED', max: 20, base: 22, grow: 1.17, fmt: t => '+' + 3 * t + '% COIN' },
-    { id: 'lives',  name: 'THICK WALLS', desc: 'EXTRA LIVES EACH RUN',         max: 10, base: 40, grow: 1.30, fmt: t => '+' + t + ' LIVES' },
+    { id: 'lives',  name: 'THICK WALLS', desc: 'MORE HEALTH EACH RUN',         max: 10, base: 40, grow: 1.30, fmt: t => '+' + 10 * t + ' HEALTH' },
   ];
   const upCost = (u, t) => Math.round(u.base * Math.pow(u.grow, t));
 
@@ -432,15 +459,19 @@ button:disabled { color: var(--dim); cursor: default; }
     const b = document.createElement('button');
     b.className = 'card';
     b.disabled = locked;
-    let mix;
-    if (L.endless) {
-      mix = `<span class="sub">RED, GREEN, BLUE. TWO-COLOUR FROM WAVE 11, WHITE FROM 21.</span>`;
-    } else {
-      const t = colourCounts(L);
-      mix = `
-        <span class="counts">${L.chans.map(c => `<span class="cnt"><span class="sw ${CH[c].cls}"></span>${t[c]}</span>`).join('')}<span class="sub">ENEMIES</span></span>
-        <span class="mixbar">${L.chans.map(c => `<span class="${CH[c].cls}" style="flex:${t[c]}"></span>`).join('')}</span>`;
-    }
+    // Three bars: each colour's share of all the red, green and blue the level throws at you.
+    // Endless has no last wave, so it measures its first 30.
+    const span = L.endless ? 30 : L.waves;
+    const { pts, enemies } = channelTotals(L, span);
+    const sum = pts[0] + pts[1] + pts[2] || 1;
+    const mix = `
+      <span class="bars">${[0, 1, 2].map(c => {
+        const pct = Math.round(pts[c] / sum * 100);
+        return `<span class="bar${pct ? '' : ' off'}"><span class="sw ${CH[c].cls}"></span><span class="track"><span class="${CH[c].cls}" style="width:${pct}%"></span></span><span class="num">${pct}%</span></span>`;
+      }).join('')}</span>
+      <span class="sub">${L.endless
+        ? 'FIRST 30 WAVES · TWO-COLOUR FROM WAVE 6, WHITE FROM 13, ANY COLOUR FROM 19'
+        : enemies + ' ENEMIES'}</span>`;
     b.innerHTML = `
       <span class="line"><span>${L.endless ? 'ENDLESS' : 'LEVEL ' + L.n}</span><span class="chips">${chips(L.chans)}</span></span>
       <span>${L.endless ? 'THE LONG ROAD' : L.name}</span>
@@ -559,7 +590,8 @@ button:disabled { color: var(--dim); cursor: default; }
   function startLevel(L) {
     S = {
       L, path: buildPath(L.path), types: towerStats(),
-      lives: 10 + P.up.lives, coins: 120 + 10 * P.up.coin, coinFrac: 0,
+      lives: 100 + 10 * P.up.lives,   // health; save key kept as 'lives' so old progress carries over
+      coins: 120 + 10 * P.up.coin, coinFrac: 0,
       coinPer: COIN_PER_POINTS * (L.endless ? 2 : 1) / (1 + 0.03 * P.up.bounty),   // endless pays half
       wave: 0, active: false, queue: [], gap: 0.8, spawnT: 0, autoT: 0,   // the first wave is always sent by hand
       enemies: [], towers: [], bullets: [], fx: [],
@@ -645,7 +677,7 @@ button:disabled { color: var(--dim); cursor: default; }
     }
     P.heat = { lv: S.L.id, counts };
     save();
-    say(won ? 'LEVEL CLEARED! +' + xp + ' XP' : 'OUT OF LIVES. +' + xp + ' XP', !won);
+    say(won ? 'LEVEL CLEARED! +' + xp + ' XP' : 'OUT OF HEALTH. +' + xp + ' XP', !won);
   }
 
   function step(dt) {
@@ -667,9 +699,12 @@ button:disabled { color: var(--dim); cursor: default; }
       if (e.dead) continue;
       e.d += e.spd * dt;
       if (e.d >= S.path.len) {
-        e.dead = true; S.lives--; S.leaks++;
-        say('LEAK! ' + S.lives + ' LIVES LEFT', true);
-        if (S.lives <= 0) { S.lives = 0; endRun(false); return; }
+        // a leak costs health in proportion to the colour left: a full single colour (255) costs 10,
+        // full white (765) costs 30, a nearly drained enemy almost nothing
+        const hit = LEAK_PER_255 * (e.c[0] + e.c[1] + e.c[2]) / 255;
+        e.dead = true; S.lives -= hit; S.leaks++;
+        say('LEAK -' + Math.ceil(hit) + ' · ' + Math.ceil(Math.max(0, S.lives)) + ' HEALTH', true);
+        if (S.lives <= 0.0001) { S.lives = 0; endRun(false); return; }
         continue;
       }
       [e.x, e.y] = posAt(S.path, e.d);
@@ -863,7 +898,8 @@ button:disabled { color: var(--dim); cursor: default; }
       <span>NEXT</span>
       <span class="groups">${shown.map(g => `<span class="cnt" title="${colourName(g.c)}"><span class="sw" style="background:${rgbCss(g.c)}"></span>${g.n}</span>`).join('')}${more > 0 ? `<span>+${more}</span>` : ''}</span>
       ${sm.tough > 1.05 ? `<span class="xp" title="Enemies take this many times longer to drain">×${sm.tough.toFixed(1)}</span>` : ''}
-      <span class="mixbar" title="Red, green and blue share of this wave">${[0, 1, 2].map(k => sm.tot[k] ? `<span class="${CH[k].cls}" style="flex:${sm.tot[k] / sum}"></span>` : '').join('')}</span>`;
+      <span class="minibars" title="Red, green and blue share of this wave">${[0, 1, 2].map(k =>
+        `<span class="track"><span class="${CH[k].cls}" style="width:${Math.round(sm.tot[k] / sum * 100)}%"></span></span>`).join('')}</span>`;
   }
 
   // ================= render =================
@@ -1023,7 +1059,7 @@ button:disabled { color: var(--dim); cursor: default; }
   function syncUI() {
     if (!S || current !== 'game') return;
     set('lvl', 'text', S.L.endless ? '∞' : String(S.L.n));
-    set('lives', 'text', String(S.lives));
+    set('lives', 'text', String(Math.ceil(S.lives)));
     set('coins', 'text', String(S.coins));
     set('wave', 'text', S.L.endless ? String(S.wave) : S.wave + '/' + S.L.waves);
     renderPreview();
@@ -1098,3 +1134,5 @@ button:disabled { color: var(--dim); cursor: default; }
   requestAnimationFrame(frame);
 })();
 </script>
+
+</body></html>
